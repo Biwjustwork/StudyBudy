@@ -127,38 +127,72 @@ type ValidatedGroupInput = {
   isOpen: boolean;
 };
 
+function reqString(input: Record<string, unknown>, field: string): { ok: true; value: string } | { ok: false; message: string } {
+  const raw = input[field];
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    return { ok: false, message: `${field} must be a non-empty string` };
+  }
+  return { ok: true, value: raw.trim() };
+}
+
+function reqFutureDatetime(input: Record<string, unknown>, field: string): { ok: true; value: string } | { ok: false; message: string } {
+  const parsed = reqString(input, field);
+  if (!parsed.ok) return parsed;
+  const time = Date.parse(parsed.value);
+  if (Number.isNaN(time)) {
+    return { ok: false, message: "datetime must be a valid ISO 8601 date string" };
+  }
+  if (time <= Date.now()) {
+    return { ok: false, message: "datetime must be in the future" };
+  }
+  return { ok: true, value: parsed.value };
+}
+
+function reqMaxMembers(input: Record<string, unknown>, field: string, min: number | null): { ok: true; value: number } | { ok: false; message: string } {
+  const raw = input[field];
+  if (!Number.isInteger(raw) || (raw as number) <= 0) {
+    return { ok: false, message: "maxMembers must be a positive integer" };
+  }
+  if (min !== null && (raw as number) < min) {
+    return { ok: false, message: "maxMembers must not be less than the current number of members" };
+  }
+  return { ok: true, value: raw as number };
+}
+
+function optIsOpen(input: Record<string, unknown>): { ok: true; value: boolean } | { ok: false; message: string } {
+  if (input["isOpen"] === undefined) return { ok: true, value: true };
+  if (typeof input["isOpen"] !== "boolean") {
+    return { ok: false, message: "isOpen must be a boolean" };
+  }
+  return { ok: true, value: input["isOpen"] };
+}
+
 function validateGroupInput(body: unknown): { ok: true; value: ValidatedGroupInput } | { ok: false; message: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, message: "Request body must be an object" };
   }
   const input = body as Record<string, unknown>;
-  for (const field of ["subject", "topic", "datetime", "location"] as const) {
-    if (typeof input[field] !== "string" || (input[field] as string).trim().length === 0) {
-      return { ok: false, message: `${field} must be a non-empty string` };
-    }
+  for (const field of ["subject", "topic", "location"] as const) {
+    const parsed = reqString(input, field);
+    if (!parsed.ok) return parsed;
   }
-  const subject = (input["subject"] as string).trim();
-  const topic = (input["topic"] as string).trim();
-  const datetime = (input["datetime"] as string).trim();
-  const location = (input["location"] as string).trim();
-  const parsed = Date.parse(datetime);
-  if (Number.isNaN(parsed)) {
-    return { ok: false, message: "datetime must be a valid ISO 8601 date string" };
-  }
-  if (parsed <= Date.now()) {
-    return { ok: false, message: "datetime must be in the future" };
-  }
-  if (!Number.isInteger(input["maxMembers"]) || (input["maxMembers"] as number) <= 0) {
-    return { ok: false, message: "maxMembers must be a positive integer" };
-  }
-  let isOpen = true;
-  if (input["isOpen"] !== undefined) {
-    if (typeof input["isOpen"] !== "boolean") {
-      return { ok: false, message: "isOpen must be a boolean" };
-    }
-    isOpen = input["isOpen"];
-  }
-  return { ok: true, value: { subject, topic, datetime, maxMembers: input["maxMembers"] as number, location, isOpen } };
+  const datetime = reqFutureDatetime(input, "datetime");
+  if (!datetime.ok) return datetime;
+  const maxMembers = reqMaxMembers(input, "maxMembers", null);
+  if (!maxMembers.ok) return maxMembers;
+  const isOpen = optIsOpen(input);
+  if (!isOpen.ok) return isOpen;
+  return {
+    ok: true,
+    value: {
+      subject: (input["subject"] as string).trim(),
+      topic: (input["topic"] as string).trim(),
+      datetime: datetime.value,
+      maxMembers: maxMembers.value,
+      location: (input["location"] as string).trim(),
+      isOpen: isOpen.value,
+    },
+  };
 }
 
 type ValidatedGroupPatch = Partial<Pick<ValidatedGroupInput, "subject" | "topic" | "datetime" | "maxMembers" | "location" | "isOpen">>;
@@ -174,34 +208,21 @@ function validateGroupPatch(body: unknown, membersLength: number): { ok: true; v
     return { ok: false, message: "At least one updatable field (subject, topic, datetime, location, maxMembers, isOpen) is required" };
   }
   const value: ValidatedGroupPatch = {};
-  for (const field of ["subject", "topic", "datetime", "location"] as const) {
+  for (const field of ["subject", "topic", "location"] as const) {
     if (input[field] === undefined) continue;
-    if (typeof input[field] !== "string" || (input[field] as string).trim().length === 0) {
-      return { ok: false, message: `${field} must be a non-empty string` };
-    }
+    const parsed = reqString(input, field);
+    if (!parsed.ok) return parsed;
+    value[field] = parsed.value;
   }
-  if (input["subject"] !== undefined) value.subject = (input["subject"] as string).trim();
-  if (input["topic"] !== undefined) value.topic = (input["topic"] as string).trim();
-  if (input["location"] !== undefined) value.location = (input["location"] as string).trim();
   if (input["datetime"] !== undefined) {
-    const datetime = (input["datetime"] as string).trim();
-    const parsed = Date.parse(datetime);
-    if (Number.isNaN(parsed)) {
-      return { ok: false, message: "datetime must be a valid ISO 8601 date string" };
-    }
-    if (parsed <= Date.now()) {
-      return { ok: false, message: "datetime must be in the future" };
-    }
-    value.datetime = datetime;
+    const datetime = reqFutureDatetime(input, "datetime");
+    if (!datetime.ok) return datetime;
+    value.datetime = datetime.value;
   }
   if (input["maxMembers"] !== undefined) {
-    if (!Number.isInteger(input["maxMembers"]) || (input["maxMembers"] as number) <= 0) {
-      return { ok: false, message: "maxMembers must be a positive integer" };
-    }
-    if ((input["maxMembers"] as number) < membersLength) {
-      return { ok: false, message: "maxMembers must not be less than the current number of members" };
-    }
-    value.maxMembers = input["maxMembers"] as number;
+    const maxMembers = reqMaxMembers(input, "maxMembers", membersLength);
+    if (!maxMembers.ok) return maxMembers;
+    value.maxMembers = maxMembers.value;
   }
   if (input["isOpen"] !== undefined) {
     if (typeof input["isOpen"] !== "boolean") {

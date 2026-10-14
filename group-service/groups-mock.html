@@ -58,10 +58,12 @@
     const seed = document.querySelector('#seed');
     const status = document.querySelector('#status');
 
+    const dayMs = 86400000;
+    const isoDay = (offset) => new Date(Date.now() + offset * dayMs).toISOString();
     const mockGroups = [
-      { id: 'mock-open', subject: 'Calculus', topic: 'Limits', datetime: '2026-11-01T10:00:00+07:00', maxMembers: 5, location: 'Library 3F', ownerId: 'u1', members: ['u1'], isOpen: true },
-      { id: 'mock-full', subject: 'Calculus', topic: 'Derivatives', datetime: '2026-11-02T10:00:00+07:00', maxMembers: 2, location: 'Library 4F', ownerId: 'u2', members: ['u2', 'u3'], isOpen: true },
-      { id: 'mock-closed', subject: 'Calculus', topic: 'Integrals', datetime: '2026-11-03T10:00:00+07:00', maxMembers: 5, location: 'Room B', ownerId: 'u4', members: ['u4'], isOpen: false }
+      { id: 'mock-open', subject: 'Calculus', topic: 'Limits', datetime: isoDay(1), maxMembers: 5, location: 'Library 3F', ownerId: 'u1', members: ['u1'], isOpen: true },
+      { id: 'mock-full', subject: 'Calculus', topic: 'Derivatives', datetime: isoDay(2), maxMembers: 2, location: 'Library 4F', ownerId: 'u2', members: ['u2', 'u3'], isOpen: true },
+      { id: 'mock-closed', subject: 'Calculus', topic: 'Integrals', datetime: isoDay(3), maxMembers: 5, location: 'Room B', ownerId: 'u4', members: ['u4'], isOpen: false }
     ];
 
     // Same logic as GET /api/groups in group-service/src/app.ts:
