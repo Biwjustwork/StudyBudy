@@ -108,7 +108,8 @@ export class GroupStore {
   }
 
   private async persist(): Promise<void> {
-    this.writeQueue = this.writeQueue.then(async () => {
+    // shortcut: a failed write must not poison later writes, single instance only — revisit with a real DB when multi-instance.
+    this.writeQueue = this.writeQueue.catch(() => {}).then(async () => {
       await mkdir(dirname(this.filePath), { recursive: true });
       const temporaryPath = `${this.filePath}.tmp`;
       await writeFile(temporaryPath, JSON.stringify([...this.groups.values()], null, 2), "utf8");

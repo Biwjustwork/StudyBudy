@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -160,4 +160,22 @@ test("non-owner cannot add members (403)", async () => {
   const denied = await postMember(g.id, "user-2", other);
   assert.equal(denied.status, 403);
   assert.equal(((await denied.json()) as { error: string }).error, "forbidden");
+});
+
+test("a failed save does not break later saves", async () => {
+  const sub = join(directory, "sub");
+  const file = join(sub, "groups.json");
+  const store2 = await GroupStore.open(file);
+  const input = { ...validBody, ownerId: "user-1", members: ["user-1"], isOpen: true };
+  await store2.create(input);
+  // Break the disk: replace the directory with a file so the next persist fails.
+  await rm(sub, { recursive: true, force: true });
+  await writeFile(sub, "in the way");
+  await assert.rejects(store2.create(input));
+  // Repair the disk: the next save must work again.
+  await rm(sub, { force: true });
+  const recovered = await store2.create(input);
+  assert.ok(recovered.id);
+  const onDisk = JSON.parse(await readFile(file, "utf8")) as unknown[];
+  assert.equal(onDisk.length, 3);
 });
