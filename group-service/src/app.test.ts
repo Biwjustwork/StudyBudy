@@ -15,6 +15,18 @@ let server: Server;
 let baseUrl: string;
 let token: string;
 
+const validBody = {
+  subject: "Calculus",
+  topic: "Limits",
+  datetime: "2026-11-01T10:00:00+07:00",
+  maxMembers: 5,
+  location: "Library 3F",
+};
+
+function authJson(t: string): Record<string, string> {
+  return { Authorization: `Bearer ${t}`, "Content-Type": "application/json" };
+}
+
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "study-buddy-group-"));
   const store = await GroupStore.open(join(directory, "groups.json"));
@@ -56,4 +68,35 @@ test("POST rejects missing subject/datetime and non-positive maxMembers with 400
     const r = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
     assert.equal(r.status, 400);
   }
+});
+
+test("GET search filters by subject case-insensitively and openOnly hides full/closed groups", async () => {
+  async function create(body: unknown): Promise<Group> {
+    const r = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify(body) });
+    assert.equal(r.status, 201);
+    return (await r.json()) as Group;
+  }
+  await create({ ...validBody, subject: "Calculus", datetime: "2026-11-03T10:00:00+07:00", maxMembers: 5 });
+  await create({ ...validBody, subject: "Calculus", datetime: "2026-11-02T10:00:00+07:00", maxMembers: 1 });
+  await create({ ...validBody, subject: "Calculus", datetime: "2026-11-04T10:00:00+07:00", maxMembers: 5, isOpen: false });
+  await create({ ...validBody, subject: "Physics", datetime: "2026-11-01T10:00:00+07:00", maxMembers: 5 });
+
+  const open = await (await fetch(`${baseUrl}/api/groups?subject=${encodeURIComponent("  CALCULUS ")}&openOnly=true`, { headers: { Authorization: `Bearer ${token}` } })).json() as Group[];
+  assert.equal(open.length, 1);
+  assert.ok(open.every((g) => g.subject.toLocaleLowerCase() === "calculus" && g.members.length < g.maxMembers && g.isOpen));
+
+  const all = await (await fetch(`${baseUrl}/api/groups`, { headers: { Authorization: `Bearer ${token}` } })).json() as Group[];
+  assert.equal(all.length, 4);
+  const times = all.map((g) => Date.parse(g.datetime));
+  assert.deepEqual([...times].sort((a, b) => a - b), times);
+});
+
+test("GET by id returns group, 404 for missing", async () => {
+  const created = await (await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify(validBody) })).json() as Group;
+  const found = await fetch(`${baseUrl}/api/groups/${created.id}`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(found.status, 200);
+  assert.equal(((await found.json()) as Group).id, created.id);
+  const missing = await fetch(`${baseUrl}/api/groups/no-such-id`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(missing.status, 404);
+  assert.equal(((await missing.json()) as { error: string }).error, "not_found");
 });

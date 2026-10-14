@@ -53,6 +53,27 @@ export function createApp(store: GroupStore, tokenSecret: string) {
     return response.status(201).json(group);
   });
 
+  app.get("/api/groups", (request: AuthenticatedRequest, response: Response) => {
+    const subjectQuery = typeof request.query["subject"] === "string" ? request.query["subject"].trim().toLocaleLowerCase() : "";
+    const openOnly = request.query["openOnly"] === "true";
+    let groups = store.list();
+    if (subjectQuery.length > 0) {
+      groups = groups.filter((group) => group.subject.trim().toLocaleLowerCase() === subjectQuery);
+    }
+    if (openOnly) {
+      groups = groups.filter((group) => group.isOpen && group.members.length < group.maxMembers);
+    }
+    groups.sort((a, b) => Date.parse(a.datetime) - Date.parse(b.datetime));
+    return response.json(groups);
+  });
+
+  app.get("/api/groups/:id", (request: AuthenticatedRequest, response: Response) => {
+    const id = request.params["id"];
+    const group = typeof id === "string" ? store.get(id) : undefined;
+    if (!group) return response.status(404).json({ error: "not_found", message: "Group not found" });
+    return response.json(group);
+  });
+
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
     if (error instanceof SyntaxError) return response.status(400).json({ error: "validation_error", message: "Request body must be valid JSON" });
     console.error(error);
