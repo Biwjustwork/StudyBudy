@@ -89,6 +89,27 @@ export function createApp(store: GroupStore, tokenSecret: string) {
     return response.json(updated);
   });
 
+  app.post("/api/groups/:id/members", async (request: AuthenticatedRequest, response: Response) => {
+    const id = request.params["id"];
+    const group = typeof id === "string" ? store.get(id) : undefined;
+    if (!group) return response.status(404).json({ error: "not_found", message: "Group not found" });
+    if (group.ownerId !== request.userId) {
+      return response.status(403).json({ error: "forbidden", message: "Only the group owner can add members" });
+    }
+    const body = request.body as Record<string, unknown> | null | undefined;
+    const userId = typeof body?.["userId"] === "string" ? (body["userId"] as string).trim() : "";
+    if (userId.length === 0) {
+      return response.status(400).json({ error: "validation_error", message: "userId must be a non-empty string" });
+    }
+    const result = await store.addMember(group.id, userId);
+    if (!result.ok) {
+      if (result.error === "not_found") return response.status(404).json({ error: "not_found", message: "Group not found" });
+      if (result.error === "conflict") return response.status(409).json({ error: "conflict", message: "User is already a member of this group" });
+      return response.status(422).json({ error: "capacity_exceeded", message: result.error === "closed" ? "Group is closed for new members" : "Group is full" });
+    }
+    return response.json(result.value);
+  });
+
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
     if (error instanceof SyntaxError) return response.status(400).json({ error: "validation_error", message: "Request body must be valid JSON" });
     console.error(error);

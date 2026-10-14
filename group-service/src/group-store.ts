@@ -94,6 +94,19 @@ export class GroupStore {
     return structuredClone(updated);
   }
 
+  async addMember(id: string, userId: string): Promise<{ ok: true; value: Group } | { ok: false; error: "not_found" | "conflict" | "capacity_exceeded" | "closed" }> {
+    // Atomic in a single tick: no await between read-check-mutate.
+    const group = this.groups.get(id);
+    if (!group) return { ok: false, error: "not_found" };
+    if (!group.isOpen) return { ok: false, error: "closed" };
+    if (group.members.includes(userId)) return { ok: false, error: "conflict" };
+    if (group.members.length >= group.maxMembers) return { ok: false, error: "capacity_exceeded" };
+    group.members.push(userId);
+    group.updatedAt = new Date().toISOString();
+    await this.persist();
+    return { ok: true, value: structuredClone(group) };
+  }
+
   private async persist(): Promise<void> {
     this.writeQueue = this.writeQueue.then(async () => {
       await mkdir(dirname(this.filePath), { recursive: true });

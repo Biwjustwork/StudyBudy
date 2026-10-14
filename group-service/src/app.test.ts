@@ -128,3 +128,36 @@ test("PATCH rejects shrinking maxMembers below current members and bad datetime"
   assert.equal(badDate.status, 400);
   assert.equal(((await badDate.json()) as { error: string }).error, "validation_error");
 });
+
+async function createGroup(authToken: string, body: unknown): Promise<Group> {
+  const r = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(authToken), body: JSON.stringify(body) });
+  assert.equal(r.status, 201);
+  return (await r.json()) as Group;
+}
+
+async function postMember(groupId: string, userId: unknown, authToken: string): Promise<Response> {
+  return fetch(`${baseUrl}/api/groups/${groupId}/members`, { method: "POST", headers: authJson(authToken), body: JSON.stringify({ userId }) });
+}
+
+test("owner can add member once, duplicate is 409, full group is 422", async () => {
+  const g = await createGroup(token, { ...validBody, maxMembers: 2 });
+  const first = await postMember(g.id, "user-2", token);
+  assert.equal(first.status, 200);
+  const added = (await first.json()) as Group;
+  assert.ok(added.members.includes("user-2"));
+  const dup = await postMember(g.id, "user-2", token);
+  assert.equal(dup.status, 409);
+  assert.equal(((await dup.json()) as { error: string }).error, "conflict");
+  // Group is now full (2/2); next distinct user must be rejected.
+  const full = await postMember(g.id, "user-3", token);
+  assert.equal(full.status, 422);
+  assert.equal(((await full.json()) as { error: string }).error, "capacity_exceeded");
+});
+
+test("non-owner cannot add members (403)", async () => {
+  const g = await createGroup(token, validBody);
+  const other = jwt.sign({ userId: "user-2" }, secret, { algorithm: "HS256" });
+  const denied = await postMember(g.id, "user-2", other);
+  assert.equal(denied.status, 403);
+  assert.equal(((await denied.json()) as { error: string }).error, "forbidden");
+});
