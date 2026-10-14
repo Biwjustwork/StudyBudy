@@ -34,7 +34,24 @@ export function createApp(store: GroupStore, tokenSecret: string) {
     }
   });
 
-  void store;
+  app.post("/api/groups", async (request: AuthenticatedRequest, response: Response) => {
+    const validated = validateGroupInput(request.body);
+    if (!validated.ok) {
+      return response.status(400).json({ error: "validation_error", message: validated.message });
+    }
+    const userId = request.userId as string;
+    const group = await store.create({
+      subject: validated.value.subject,
+      topic: validated.value.topic,
+      datetime: validated.value.datetime,
+      maxMembers: validated.value.maxMembers,
+      location: validated.value.location,
+      ownerId: userId,
+      members: [userId],
+      isOpen: validated.value.isOpen,
+    });
+    return response.status(201).json(group);
+  });
 
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
     if (error instanceof SyntaxError) return response.status(400).json({ error: "validation_error", message: "Request body must be valid JSON" });
@@ -42,4 +59,47 @@ export function createApp(store: GroupStore, tokenSecret: string) {
     return response.status(500).json({ error: "internal_error", message: "An unexpected error occurred" });
   });
   return app;
+}
+
+type ValidatedGroupInput = {
+  subject: string;
+  topic: string;
+  datetime: string;
+  maxMembers: number;
+  location: string;
+  isOpen: boolean;
+};
+
+function validateGroupInput(body: unknown): { ok: true; value: ValidatedGroupInput } | { ok: false; message: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, message: "Request body must be an object" };
+  }
+  const input = body as Record<string, unknown>;
+  for (const field of ["subject", "topic", "datetime", "location"] as const) {
+    if (typeof input[field] !== "string" || (input[field] as string).trim().length === 0) {
+      return { ok: false, message: `${field} must be a non-empty string` };
+    }
+  }
+  const subject = (input["subject"] as string).trim();
+  const topic = (input["topic"] as string).trim();
+  const datetime = (input["datetime"] as string).trim();
+  const location = (input["location"] as string).trim();
+  const parsed = Date.parse(datetime);
+  if (Number.isNaN(parsed)) {
+    return { ok: false, message: "datetime must be a valid ISO 8601 date string" };
+  }
+  if (parsed <= Date.now()) {
+    return { ok: false, message: "datetime must be in the future" };
+  }
+  if (!Number.isInteger(input["maxMembers"]) || (input["maxMembers"] as number) <= 0) {
+    return { ok: false, message: "maxMembers must be a positive integer" };
+  }
+  let isOpen = true;
+  if (input["isOpen"] !== undefined) {
+    if (typeof input["isOpen"] !== "boolean") {
+      return { ok: false, message: "isOpen must be a boolean" };
+    }
+    isOpen = input["isOpen"];
+  }
+  return { ok: true, value: { subject, topic, datetime, maxMembers: input["maxMembers"] as number, location, isOpen } };
 }

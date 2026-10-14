@@ -7,7 +7,7 @@ import jwt from "jsonwebtoken";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { createApp } from "./app.js";
-import { GroupStore } from "./group-store.js";
+import { GroupStore, type Group } from "./group-store.js";
 
 const secret = "test-only-secret";
 let directory: string;
@@ -40,4 +40,20 @@ test("API without token returns 401 {error,message}", async () => {
   const r = await fetch(`${baseUrl}/api/groups`);
   assert.equal(r.status, 401);
   assert.deepEqual(Object.keys(await r.json()).sort(), ["error", "message"]);
+});
+
+test("POST creates group with valid input and sets owner from token", async () => {
+  const r = await fetch(`${baseUrl}/api/groups`, { method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ subject: "Calculus", topic: "Limits", datetime: "2026-11-01T10:00:00+07:00", maxMembers: 5, location: "Library 3F" }) });
+  assert.equal(r.status, 201);
+  const g = await r.json() as Group;
+  assert.equal(g.ownerId, "user-1"); assert.deepEqual(g.members, ["user-1"]);
+});
+
+test("POST rejects missing subject/datetime and non-positive maxMembers with 400", async () => {
+  for (const body of [{ topic: "x" }, { subject: "Cal", topic: "t", datetime: "not-a-date", maxMembers: 5, location: "l" }, { subject: "Cal", topic: "t", datetime: "2026-11-01T10:00:00+07:00", maxMembers: 0, location: "l" }, { subject: "Cal", topic: "t", datetime: "2026-11-01T10:00:00+07:00", maxMembers: 2.5, location: "l" }]) {
+    const r = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    assert.equal(r.status, 400);
+  }
 });
