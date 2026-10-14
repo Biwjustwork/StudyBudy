@@ -74,6 +74,21 @@ export function createApp(store: GroupStore, tokenSecret: string) {
     return response.json(group);
   });
 
+  app.patch("/api/groups/:id", async (request: AuthenticatedRequest, response: Response) => {
+    const id = request.params["id"];
+    const group = typeof id === "string" ? store.get(id) : undefined;
+    if (!group) return response.status(404).json({ error: "not_found", message: "Group not found" });
+    if (group.ownerId !== request.userId) {
+      return response.status(403).json({ error: "forbidden", message: "Only the group owner can update this group" });
+    }
+    const validated = validateGroupPatch(request.body, group.members.length);
+    if (!validated.ok) {
+      return response.status(400).json({ error: "validation_error", message: validated.message });
+    }
+    const updated = await store.update(group.id, validated.value);
+    return response.json(updated);
+  });
+
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
     if (error instanceof SyntaxError) return response.status(400).json({ error: "validation_error", message: "Request body must be valid JSON" });
     console.error(error);
@@ -123,4 +138,55 @@ function validateGroupInput(body: unknown): { ok: true; value: ValidatedGroupInp
     isOpen = input["isOpen"];
   }
   return { ok: true, value: { subject, topic, datetime, maxMembers: input["maxMembers"] as number, location, isOpen } };
+}
+
+type ValidatedGroupPatch = Partial<Pick<ValidatedGroupInput, "subject" | "topic" | "datetime" | "maxMembers" | "location" | "isOpen">>;
+
+function validateGroupPatch(body: unknown, membersLength: number): { ok: true; value: ValidatedGroupPatch } | { ok: false; message: string } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, message: "Request body must be an object" };
+  }
+  const input = body as Record<string, unknown>;
+  const allowed = ["subject", "topic", "datetime", "location", "maxMembers", "isOpen"] as const;
+  const present = allowed.filter((field) => input[field] !== undefined);
+  if (present.length === 0) {
+    return { ok: false, message: "At least one updatable field (subject, topic, datetime, location, maxMembers, isOpen) is required" };
+  }
+  const value: ValidatedGroupPatch = {};
+  for (const field of ["subject", "topic", "datetime", "location"] as const) {
+    if (input[field] === undefined) continue;
+    if (typeof input[field] !== "string" || (input[field] as string).trim().length === 0) {
+      return { ok: false, message: `${field} must be a non-empty string` };
+    }
+  }
+  if (input["subject"] !== undefined) value.subject = (input["subject"] as string).trim();
+  if (input["topic"] !== undefined) value.topic = (input["topic"] as string).trim();
+  if (input["location"] !== undefined) value.location = (input["location"] as string).trim();
+  if (input["datetime"] !== undefined) {
+    const datetime = (input["datetime"] as string).trim();
+    const parsed = Date.parse(datetime);
+    if (Number.isNaN(parsed)) {
+      return { ok: false, message: "datetime must be a valid ISO 8601 date string" };
+    }
+    if (parsed <= Date.now()) {
+      return { ok: false, message: "datetime must be in the future" };
+    }
+    value.datetime = datetime;
+  }
+  if (input["maxMembers"] !== undefined) {
+    if (!Number.isInteger(input["maxMembers"]) || (input["maxMembers"] as number) <= 0) {
+      return { ok: false, message: "maxMembers must be a positive integer" };
+    }
+    if ((input["maxMembers"] as number) < membersLength) {
+      return { ok: false, message: "maxMembers must not be less than the current number of members" };
+    }
+    value.maxMembers = input["maxMembers"] as number;
+  }
+  if (input["isOpen"] !== undefined) {
+    if (typeof input["isOpen"] !== "boolean") {
+      return { ok: false, message: "isOpen must be a boolean" };
+    }
+    value.isOpen = input["isOpen"];
+  }
+  return { ok: true, value };
 }

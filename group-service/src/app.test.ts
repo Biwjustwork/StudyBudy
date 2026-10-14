@@ -14,6 +14,7 @@ let directory: string;
 let server: Server;
 let baseUrl: string;
 let token: string;
+let store: GroupStore;
 
 const validBody = {
   subject: "Calculus",
@@ -29,7 +30,7 @@ function authJson(t: string): Record<string, string> {
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "study-buddy-group-"));
-  const store = await GroupStore.open(join(directory, "groups.json"));
+  store = await GroupStore.open(join(directory, "groups.json"));
   server = createApp(store, secret).listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -99,4 +100,31 @@ test("GET by id returns group, 404 for missing", async () => {
   const missing = await fetch(`${baseUrl}/api/groups/no-such-id`, { headers: { Authorization: `Bearer ${token}` } });
   assert.equal(missing.status, 404);
   assert.equal(((await missing.json()) as { error: string }).error, "not_found");
+});
+
+test("PATCH by owner updates topic/location, non-owner gets 403", async () => {
+  const created = await (await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify(validBody) })).json() as Group;
+  const ok = await fetch(`${baseUrl}/api/groups/${created.id}`, { method: "PATCH", headers: authJson(token), body: JSON.stringify({ topic: "Derivatives", location: "Room 204" }) });
+  assert.equal(ok.status, 200);
+  const updated = await ok.json() as Group;
+  assert.equal(updated.topic, "Derivatives");
+  assert.equal(updated.location, "Room 204");
+  assert.equal(updated.ownerId, "user-1");
+  assert.deepEqual(updated.members, ["user-1"]);
+  const other = jwt.sign({ userId: "user-2" }, secret, { algorithm: "HS256" });
+  const denied = await fetch(`${baseUrl}/api/groups/${created.id}`, { method: "PATCH", headers: authJson(other), body: JSON.stringify({ topic: "hack" }) });
+  assert.equal(denied.status, 403);
+  assert.equal(((await denied.json()) as { error: string }).error, "forbidden");
+});
+
+test("PATCH rejects shrinking maxMembers below current members and bad datetime", async () => {
+  const created = await (await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify({ ...validBody, maxMembers: 3 }) })).json() as Group;
+  // Seed 3 members via the store directly (no forward dep on Task 5 endpoint).
+  await store.update(created.id, { members: ["user-1", "user-2", "user-3"] });
+  const shrink = await fetch(`${baseUrl}/api/groups/${created.id}`, { method: "PATCH", headers: authJson(token), body: JSON.stringify({ maxMembers: 2 }) });
+  assert.equal(shrink.status, 400);
+  assert.equal(((await shrink.json()) as { error: string }).error, "validation_error");
+  const badDate = await fetch(`${baseUrl}/api/groups/${created.id}`, { method: "PATCH", headers: authJson(token), body: JSON.stringify({ datetime: "tomorrow" }) });
+  assert.equal(badDate.status, 400);
+  assert.equal(((await badDate.json()) as { error: string }).error, "validation_error");
 });
