@@ -1,0 +1,121 @@
+# Study Buddy API Contract
+
+สถานะเอกสาร: ข้อตกลงสำหรับใช้พัฒนาและเชื่อม service ใน repo กลางของทีม ให้เจ้าของ service ตรวจ contract ก่อนเปิด PR ที่เปลี่ยน API
+
+## 1. ภาพรวมระบบ
+
+ทุก service อยู่ใน repository เดียว แต่แยกโฟลเดอร์และมีขอบเขตหน้าที่ชัดเจน:
+
+| Service | โฟลเดอร์ | Local port | หน้าที่ |
+|---|---|---:|---|
+| Auth | `auth-service/` | 3001 | สมัครสมาชิก เข้าสู่ระบบ และออก/ตรวจ token |
+| Profile & Subject | `profile-service/` | 3002 | ข้อมูลโปรไฟล์และวิชาที่สนใจ |
+| Study Group / Session | `group-service/` | 3003 | สร้าง ค้นหา และจัดการกลุ่มอ่าน |
+| Membership | `membership-service/` | 3004 | คำขอเข้าร่วมและการตัดสินใจของเจ้าของกลุ่ม |
+| Notification | `notification-service/` | 3005 | แจ้งสถานะคำขอและการเปลี่ยนแปลง |
+
+ทุก service มี `GET /health` สำหรับตรวจสถานะ โดยคืน `200` และ JSON ที่มี `status: "ok"` กับชื่อ service
+
+## 2. ข้อตกลง HTTP ร่วม
+
+- API ใช้ HTTP และ JSON; URL สำหรับเรียกจาก service อื่นอ่านจาก environment variable เช่น `AUTH_URL`, `PROFILE_URL`, `GROUP_URL`, `MEMBER_URL`, `NOTIFY_URL` ห้ามฝัง URL ปลายทาง production ไว้ใน source code
+- คำขอที่มี body ส่ง `Content-Type: application/json`; คำตอบเป็น JSON ยกเว้น `204 No Content`
+- การยืนยันตัวตนใช้ `Authorization: Bearer <token>` ห้ามรับ `userId` หรือ `ownerId` จาก body เพื่อใช้ตัดสินตัวตน ให้ใช้ `userId` จาก token เท่านั้น
+- JWT ใช้ HS256 และต้องมี `userId` เป็น string และ `exp`; ทุก service ที่ตรวจ token ใช้ `AUTH_TOKEN_SECRET` ค่าเดียวกันจาก environment ห้าม commit secret
+- รูปแบบ error กลางคือ `{ "error": "error_code", "message": "คำอธิบาย" }`
+- สถานะหลัก: `400` ข้อมูลหรือ JSON ไม่ถูกต้อง, `401` ไม่มี/ใช้ token ไม่ได้, `403` ไม่มีสิทธิ์, `404` ไม่พบข้อมูล, `409` ข้อมูลซ้ำหรือสถานะขัดกัน, `422` ขัดกติกาธุรกิจ เช่น กลุ่มเต็ม, `500` ข้อผิดพลาดที่ไม่คาดคิด
+
+## 3. Auth Service
+
+### `POST /api/register`
+
+สมัครบัญชี โดยใช้อีเมลเป็น username
+
+Request:
+
+```json
+{ "email": "student@example.com", "password": "StudyBuddy!1", "name": "Aun" }
+```
+
+เงื่อนไข: email ต้องอยู่ในรูปแบบที่ถูกต้องและไม่ซ้ำ; password ยาวอย่างน้อย 8 ตัวและมีตัวพิมพ์ใหญ่กับอักขระพิเศษ; name ต้องไม่เป็นค่าว่าง; เก็บ password ด้วย bcrypt เท่านั้น
+
+สำเร็จ `201`:
+
+```json
+{ "userId": "user-123", "email": "student@example.com" }
+```
+
+ข้อมูลไม่ผ่านตอบ `400`, email ซ้ำตอบ `409` การสร้างบัญชีต้องสร้าง profile เริ่มต้นผ่าน `POST /internal/users` ของ Profile Service ก่อนตอบสำเร็จ; หาก Profile Service ใช้งานไม่ได้ให้ตอบ `503` และห้ามทิ้งบัญชีที่ใช้ต่อไม่ได้ไว้โดยไม่มีแนวทางชดเชย
+
+### `POST /api/login`
+
+Request: `{ "email": "student@example.com", "password": "StudyBuddy!1" }`
+
+สำเร็จ `200`: `{ "userId": "user-123", "token": "<jwt>" }`. ข้อมูลผิดหรือไม่พบบัญชีให้ตอบ `401` ด้วยข้อความทั่วไปที่ไม่เปิดเผยว่ามีอีเมลนั้นอยู่หรือไม่
+
+### `GET /api/me`
+
+ต้องมี Bearer token; สำเร็จ `200`: `{ "userId": "user-123", "email": "student@example.com" }`. token หาย ผิดรูปแบบ หมดอายุ หรือลายเซ็นไม่ถูกต้องตอบ `401`
+
+## 4. Profile & Subject Service
+
+สัญญานี้คงชื่อ `id` และ `name` ที่ Profile Service ใช้อยู่ โดย `id` ต้องมีค่าเดียวกับ `userId` ใน JWT และ Auth response
+
+### `POST /internal/users` — สำหรับ Auth Service เท่านั้น
+
+สร้าง profile หลังสมัครสมาชิก; ตรวจ `X-Service-Token` กับ `PROFILE_SERVICE_TOKEN` จาก environment
+
+Request: `{ "id": "user-123", "name": "Aun", "email": "student@example.com" }`
+
+สำเร็จ `201`: `{ "id": "user-123", "name": "Aun", "email": "student@example.com", "subjects": [] }`. ID ซ้ำตอบ `409`; ไม่มีหรือ token ภายในไม่ถูกต้องตอบ `401`
+
+### `GET /api/users/:id`
+
+ต้องมี Bearer token และ `:id` ต้องตรงกับ `userId` ใน token; สำเร็จ `200`:
+
+```json
+{ "id": "user-123", "name": "Aun", "email": "student@example.com", "subjects": ["ชีววิทยา"] }
+```
+
+email แสดงเมื่อมีข้อมูลและอาจไม่มีใน profile เก่าที่ยังไม่ถูกเติม; ไม่ตรงเจ้าของตอบ `403`; ไม่มี profile ตอบ `404`
+
+### `PUT /api/users/:id`
+
+แก้รายการวิชาของตนเองเท่านั้น Request: `{ "subjects": ["ชีววิทยา", "เคมี"] }`. รับ array ของ string ที่ไม่ว่างหลัง trim และไม่มีค่าซ้ำโดยไม่แยกตัวพิมพ์เล็ก/ใหญ่; สำเร็จ `200` คืน profile ปัจจุบันในรูปแบบเดียวกับ GET; ข้อมูลผิดตอบ `400`
+
+### `GET /api/users/search?subject=ชีววิทยา`
+
+ต้องมี Bearer token; ค้นหาวิชาตรงกันแบบไม่แยกตัวพิมพ์เล็ก/ใหญ่ สำเร็จ `200` คืน array โดยแต่ละรายการมีเฉพาะ `{ "id", "name", "subjects" }`; ไม่พบคืน `[]`; ไม่มี subject ตอบ `400`
+
+## 5. Study Group / Session Service
+
+ตัวตนของเจ้าของกลุ่มมาจาก JWT เท่านั้น
+
+- `POST /api/groups`: รับ `subject`, `topic`, `startsAt`, `maxMembers`, `location` และ `description` (ถ้ามี); สร้างกลุ่มโดยกำหนด owner จาก token; สำเร็จ `201` คืน group object
+- `GET /api/groups?subject=ชีววิทยา&openOnly=true`: ค้นหาตามวิชาและสถานะเปิดรับ; สำเร็จ `200` คืน array, ไม่พบคืน `[]`
+- `GET /api/groups/:id`: คืนรายละเอียดกลุ่มและจำนวนสมาชิก; กลุ่มไม่มีตอบ `404`
+- `PATCH /api/groups/:id`: เจ้าของกลุ่มเท่านั้นแก้ข้อมูลกลุ่ม; ผู้ใช้อื่นตอบ `403`, กลุ่มไม่มีตอบ `404`
+- `POST /internal/groups/:id/members`: สำหรับ Membership Service เพิ่มสมาชิกแบบ atomic เมื่อกลุ่มยังไม่เต็ม; ตรวจ `X-Service-Token`; สำเร็จ `200` คืนจำนวนสมาชิกใหม่, กลุ่มเต็มตอบ `422`, เพิ่ม user ซ้ำตอบ `409`
+
+ข้อมูลสร้าง/แก้ไขต้องมี subject และ topic ที่ไม่ว่าง, startsAt เป็น ISO 8601 พร้อม timezone, maxMembers เป็นจำนวนเต็มบวก และ location ไม่เป็นค่าว่าง; ข้อมูลผิดตอบ `400`
+
+## 6. Membership Service
+
+ตัวตนผู้ขอและผู้ตัดสินมาจาก JWT
+
+- `POST /api/requests`: body `{ "groupId": "group-123" }`; สร้างคำขอ `pending` โดยใช้ userId จาก token; สำเร็จ `201` คืน request; คำขอซ้ำตอบ `409`; กลุ่มไม่มีตอบ `404`; กลุ่มเต็มตอบ `422`
+- `GET /api/requests?groupId=group-123`: เจ้าของกลุ่มเท่านั้นดูรายการคำขอได้; สำเร็จ `200` คืน array
+- `POST /api/requests/:id/approve`: เจ้าของกลุ่มอนุมัติ; ก่อนบันทึกสถานะต้องเรียก `POST /internal/groups/:id/members`; เพิ่มสมาชิกสำเร็จแล้วจึงเปลี่ยนสถานะเป็น `approved`; คำขอที่ตัดสินแล้วตอบ `409`
+- `POST /api/requests/:id/reject`: เจ้าของกลุ่มปฏิเสธ; สำเร็จคืน request สถานะ `rejected`; ผู้ไม่มีสิทธิ์ตอบ `403`; request/group ไม่มีตอบ `404`
+
+หลังอนุมัติหรือปฏิเสธ ให้ส่ง event ไป Notification Service; การแจ้งเตือนล้มเหลวต้องถูกบันทึกและลองซ้ำได้ โดยไม่ทำให้การอนุมัติถูกดำเนินซ้ำหรือเพิ่มสมาชิกซ้ำ
+
+## 7. Notification Service
+
+- `POST /internal/notifications`: Membership Service เรียกด้วย `X-Service-Token`; body `{ "userId": "user-123", "type": "request_approved", "message": "คำขอเข้ากลุ่มได้รับอนุมัติ", "relatedId": "request-123" }`; สำเร็จ `201` คืน notification
+- `GET /api/notifications`: ต้องมี Bearer token; คืนเฉพาะรายการของ userId ใน token เรียงใหม่ไปเก่า
+- `PATCH /api/notifications/:id/read`: ทำเครื่องหมายอ่านแล้วได้เฉพาะ notification ของตน; สำเร็จ `200`, ไม่มีรายการตอบ `404`, เป็นของผู้อื่นตอบ `403`
+
+## 8. การเปลี่ยนสัญญา
+
+ผู้แก้ API ต้องปรับเอกสารนี้และเพิ่ม/แก้ test ที่เกี่ยวข้องใน PR เดียวกับการเปลี่ยนโค้ด ระบุ consumer ที่ได้รับผลกระทบ และแจ้งเจ้าของ service ปลายทางก่อน merge; ห้ามเปลี่ยนชื่อ field, status code หรือสิทธิ์แบบเงียบ ๆ

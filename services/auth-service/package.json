@@ -1,0 +1,16 @@
+{
+  "name": "study-buddy-auth-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Authentication service for Study Buddy",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node tests/authValidation.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
