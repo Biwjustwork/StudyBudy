@@ -125,6 +125,7 @@ Membership Service เก็บคำขอในไฟล์ JSON ของต�
 - `GET /api/requests?groupId=group-123`: เจ้าของกลุ่มเท่านั้นดูรายการคำขอได้; สำเร็จ `200` คืน array โดยแต่ละรายการเพิ่ม `requesterName` และ `requesterEmail` จาก Profile Service
 - `DELETE /api/groups/:id`: เจ้าของกลุ่มเท่านั้นลบกลุ่มได้ผ่าน Membership Service; ต้องไม่มีสมาชิกอื่นนอกจากเจ้าของและไม่มีคำขอที่ยัง pending; สำเร็จ `204`, เงื่อนไขไม่ครบตอบ `409`; Membership ประสาน Group Service ผ่าน `DELETE /internal/groups/:id` และ service token
 - `DELETE /api/groups/:id/leave`: สมาชิกที่ไม่ใช่เจ้าของออกจากกลุ่มได้; สำเร็จ `204`; ผู้ที่ไม่ได้เป็นสมาชิกตอบ `409`; เจ้าของต้องลบกลุ่มแทน
+- `DELETE /api/groups/:id/members/:memberId`: เจ้าของกลุ่มนำสมาชิกคนอื่นออกได้; สำเร็จ `204`; ผู้ที่ไม่ใช่เจ้าของตอบ `403`; นำเจ้าของออกไม่ได้; สมาชิกที่ถูกนำออกส่งคำขอเข้าร่วมใหม่ได้
 - `POST /api/requests/:id/approve`: เจ้าของกลุ่มอนุมัติ; ก่อนบันทึกสถานะต้องเรียก `POST /internal/groups/:id/members`; เพิ่มสมาชิกสำเร็จแล้วจึงเปลี่ยนสถานะเป็น `approved`; คำขอที่ตัดสินแล้วตอบ `409`
 - `POST /api/requests/:id/reject`: เจ้าของกลุ่มปฏิเสธ; สำเร็จคืน request สถานะ `rejected`; ผู้ไม่มีสิทธิ์ตอบ `403`; request/group ไม่มีตอบ `404`
 

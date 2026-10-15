@@ -15,6 +15,7 @@ All `/api` endpoints require an Auth Service JWT signed with HS256 and containin
 | POST | `/api/requests/:id/reject` | Owner only; marks a pending request `rejected` |
 | DELETE | `/api/groups/:id` | Owner only; deletes a group only when the owner is its sole member and no request is pending (`204`; otherwise `409`) |
 | DELETE | `/api/groups/:id/leave` | A non-owner member leaves a group (`204`); owners must delete their group instead |
+| DELETE | `/api/groups/:id/members/:memberId` | Group owner removes a non-owner member (`204`); non-owners receive `403` |
 
 Only one pending request is allowed per `(groupId, requesterId)`; after rejection, the requester may apply again. Owner request lists include `requesterName` and `requesterEmail`, resolved from Profile Service; the requester ID remains available as a technical field. A full or closed group returns `422`; repeated pending requests or decisions return `409`. A decision response includes `notificationStatus` (`sent` or `pending`) and, if pending, a `notificationLastError` to make an undelivered event visible.
 

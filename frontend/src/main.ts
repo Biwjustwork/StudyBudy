@@ -25,6 +25,9 @@ const apiErrorTranslations: Record<string, string> = {
   'Groups with pending membership requests cannot be deleted': 'ลบกลุ่มไม่ได้ เพราะยังมีคำขอเข้าร่วมที่รออนุมัติอยู่',
   'Group owner cannot leave the group; delete it instead': 'เจ้าของกลุ่มออกจากกลุ่มไม่ได้ หากต้องการปิดกลุ่มให้ใช้ปุ่มลบกลุ่ม',
   'You are not a member of this group': 'คุณไม่ได้เป็นสมาชิกของกลุ่มนี้',
+  'Only the group owner can remove members': 'เฉพาะเจ้าของกลุ่มเท่านั้นที่นำสมาชิกออกได้',
+  'The group owner cannot be removed': 'ไม่สามารถนำเจ้าของกลุ่มออกได้',
+  'Member not found in this group': 'ไม่พบสมาชิกคนนี้ในกลุ่ม',
   'Only the group owner can delete this group': 'เฉพาะเจ้าของกลุ่มเท่านั้นที่ลบกลุ่มได้',
   'This group is already being changed': 'กลุ่มกำลังถูกแก้ไข กรุณาลองใหม่อีกครั้ง',
   'This group is being changed; try again': 'กลุ่มกำลังถูกแก้ไข กรุณาลองใหม่อีกครั้ง',
@@ -582,6 +585,7 @@ async function loadRequests() {
             pendingCount > 0 ? `ยังมีคำขอรออนุมัติ ${pendingCount} รายการ` : '',
           ].filter(Boolean);
 
+          const renderedRemovalFor = new Set<string>();
           let reqRows = '';
           if (reqs.length === 0) {
             reqRows = '<div class="empty-state-compact">ยังไม่มีคำขอเข้าร่วมสำหรับกลุ่มนี้</div>';
@@ -600,6 +604,10 @@ async function loadRequests() {
                     </div>`;
                 } else if (r.status === 'approved') {
                   statusPill = '<span class="status-badge open">อนุมัติแล้ว</span>';
+                  if (group.members.includes(r.requesterId) && !renderedRemovalFor.has(r.requesterId)) {
+                    renderedRemovalFor.add(r.requesterId);
+                    actionButtons = `<button class="button button-quiet button-sm" data-action="remove-member" data-group-id="${escapeAttribute(group.id)}" data-member-id="${escapeAttribute(r.requesterId)}" data-member-name="${escapeAttribute(r.requesterName || 'สมาชิกคนนี้')}">นำสมาชิกออก</button>`;
+                  }
                 } else {
                   statusPill = '<span class="status-badge closed">ปฏิเสธแล้ว</span>';
                 }
@@ -673,6 +681,29 @@ async function loadRequests() {
       btn.addEventListener('click', (e) => {
         const rId = (e.currentTarget as HTMLElement).getAttribute('data-request-id');
         if (rId) void handleDecision(rId, 'reject');
+      });
+    });
+
+    ownerGroupsContainer.querySelectorAll<HTMLButtonElement>('[data-action="remove-member"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const groupId = btn.dataset.groupId;
+        const memberId = btn.dataset.memberId;
+        const memberName = btn.dataset.memberName || 'สมาชิกคนนี้';
+        if (!groupId || !memberId || !(await confirmInApp(
+          'นำสมาชิกออกจากกลุ่ม?',
+          `ยืนยันนำ ${memberName} ออกจากกลุ่มหรือไม่? สมาชิกคนนี้จะเข้าถึงกลุ่มไม่ได้ และสามารถส่งคำขอเข้าร่วมใหม่ได้ภายหลัง`,
+          'นำออกจากกลุ่ม',
+        ))) return;
+        btn.disabled = true;
+        try {
+          await apiRequest<void>(memberUrl, `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberId)}`, { method: 'DELETE' });
+          showToast(`นำ ${memberName} ออกจากกลุ่มแล้ว`);
+          void loadRequests();
+          void loadGroups(groupSearchInput.value, groupSearchOpenOnly.checked);
+        } catch (error) {
+          showToast((error as Error).message, true);
+          btn.disabled = false;
+        }
       });
     });
 
@@ -826,6 +857,10 @@ function escapeHtml(str: string): string {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function escapeAttribute(str: string): string {
+  return escapeHtml(str).replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
 // ================= Event Listeners Wiring =================

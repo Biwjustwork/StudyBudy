@@ -157,6 +157,32 @@ export function createApp(
     }
   });
 
+  app.delete("/api/groups/:id/members/:memberId", async (request: AuthenticatedRequest, response: Response) => {
+    const groupId = request.params["id"];
+    const memberId = request.params["memberId"];
+    if (typeof groupId !== "string" || typeof memberId !== "string" || !store.beginGroupOperation(groupId)) {
+      return response.status(409).json({ error: "conflict", message: "This group is already being changed" });
+    }
+    try {
+      const group = await groupClient.getGroup(groupId, request.bearerToken as string);
+      if (group.ownerId !== request.userId) {
+        return response.status(403).json({ error: "forbidden", message: "Only the group owner can remove members" });
+      }
+      if (memberId === group.ownerId) {
+        return response.status(409).json({ error: "conflict", message: "The group owner cannot be removed" });
+      }
+      if (!group.members.includes(memberId)) {
+        return response.status(404).json({ error: "not_found", message: "Member not found in this group" });
+      }
+      await groupClient.removeMember(groupId, memberId);
+      return response.sendStatus(204);
+    } catch (error) {
+      return sendGroupError(response, error);
+    } finally {
+      store.endGroupOperation(groupId);
+    }
+  });
+
   app.post("/api/requests/:id/approve", async (request: AuthenticatedRequest, response: Response) => {
     return decideRequest(request, response, "approved", store, groupClient, notificationClient);
   });
