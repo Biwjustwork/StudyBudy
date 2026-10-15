@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Study Buddy Membership</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.5 system-ui, sans-serif; color: #1b2740; background: #f3f6fb; }
+    body { margin: 0; padding: 2rem 1rem; }
+    main { max-width: 760px; margin: auto; }
+    section { margin: 1rem 0; padding: 1.25rem; border: 1px solid #dbe3f0; border-radius: 12px; background: white; }
+    label { display: block; margin: .75rem 0 .25rem; font-weight: 600; }
+    input { box-sizing: border-box; width: 100%; padding: .65rem; border: 1px solid #b8c5d9; border-radius: 7px; }
+    button { margin: .75rem .35rem .2rem 0; padding: .55rem .85rem; border: 0; border-radius: 7px; color: white; background: #3159a6; cursor: pointer; }
+    button.secondary { background: #53647e; }
+    .request { margin: .75rem 0; padding: .8rem; border: 1px solid #e1e7f0; border-radius: 8px; }
+    .status { min-height: 1.5rem; color: #3159a6; }
+    .error { color: #a32929; }
+    pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Study Buddy Membership</h1>
+    <section>
+      <label for="apiUrl">Membership API URL</label>
+      <input id="apiUrl" value="http://localhost:3004">
+      <label for="token">Bearer token</label>
+      <input id="token" type="password" autocomplete="off" placeholder="Paste a token from Auth Service">
+      <p>Token stays in this page and is not saved.</p>
+    </section>
+    <section>
+      <h2>Request to join a group</h2>
+      <label for="requestGroup">Group ID</label>
+      <input id="requestGroup" placeholder="Group ID">
+      <button id="sendRequest">Send request</button>
+    </section>
+    <section>
+      <h2>Owner requests</h2>
+      <label for="ownerGroup">Group ID</label>
+      <input id="ownerGroup" placeholder="Group ID">
+      <button id="loadRequests">Load requests</button>
+      <div id="requests"></div>
+    </section>
+    <p id="message" class="status" role="status" aria-live="polite"></p>
+  </main>
+  <script>
+    const byId = (id) => document.getElementById(id);
+    const message = (text, isError = false) => {
+      byId("message").textContent = text;
+      byId("message").className = isError ? "status error" : "status";
+    };
+    const apiBase = () => byId("apiUrl").value.trim().replace(/\/+$/, "");
+    const authHeaders = () => ({
+      Authorization: `Bearer ${byId("token").value}`,
+      "Content-Type": "application/json"
+    });
+    async function request(path, options = {}) {
+      const response = await fetch(`${apiBase()}${path}`, { ...options, headers: { ...authHeaders(), ...options.headers } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || body.error || `Request failed (${response.status})`);
+      return body;
+    }
+    byId("sendRequest").addEventListener("click", async () => {
+      try {
+        const result = await request("/api/requests", {
+          method: "POST",
+          body: JSON.stringify({ groupId: byId("requestGroup").value.trim() })
+        });
+        message(`Request sent: ${result.status}`);
+      } catch (error) {
+        message(error.message, true);
+      }
+    });
+    byId("loadRequests").addEventListener("click", loadRequests);
+    async function loadRequests() {
+      try {
+        const groupId = encodeURIComponent(byId("ownerGroup").value.trim());
+        const results = await request(`/api/requests?groupId=${groupId}`);
+        const container = byId("requests");
+        container.replaceChildren();
+        if (results.length === 0) {
+          container.textContent = "No requests.";
+          return;
+        }
+        for (const item of results) {
+          const card = document.createElement("article");
+          card.className = "request";
+          const info = document.createElement("pre");
+          info.textContent = JSON.stringify(item, null, 2);
+          card.append(info);
+          if (item.status === "pending") {
+            for (const decision of ["approve", "reject"]) {
+              const button = document.createElement("button");
+              button.className = decision === "reject" ? "secondary" : "";
+              button.textContent = decision;
+              button.addEventListener("click", async () => {
+                try {
+                  await request(`/api/requests/${encodeURIComponent(item.id)}/${decision}`, { method: "POST" });
+                  message(`Request ${decision === "approve" ? "approved" : "rejected"}.`);
+                  await loadRequests();
+                } catch (error) {
+                  message(error.message, true);
+                }
+              });
+              card.append(button);
+            }
+          }
+          container.append(card);
+        }
+        message(`Loaded ${results.length} request(s).`);
+      } catch (error) {
+        message(error.message, true);
+      }
+    }
+  </script>
+</body>
+</html>
