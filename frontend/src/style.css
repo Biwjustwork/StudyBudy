@@ -1308,3 +1308,11 @@ body{background:#f5faff}.app-shell{color:#173b60}.brand-mark{background:#1769aa;
 .brand:hover .logo-orbit{stroke-opacity:1}
 @media(max-width:760px){.brand-mark{width:37px;height:37px}}
 @media(prefers-reduced-motion:reduce){.brand-mark .logo-orbit{transition:none}}
+/* Keep status and action colors within the blue and white palette. */
+.status-badge.open,.badge-member,.noti-badge-type.approved{background:#e7f4ff;color:#236d9f}
+.status-badge.pending{background:#edf7ff;color:#397da8}
+.status-badge.full,.badge-owner{background:#eef6fc;color:#456d89}
+.button-success{background:#287fbd;color:#fff}
+.button-success:hover{background:#1c6ea9}
+.tab-badge{background:#69a9d3;color:#fff}
+.noti-badge-type.pending{background:#edf7ff;color:#397da8}

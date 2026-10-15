@@ -522,7 +522,7 @@ async function loadRequests() {
                 let actionButtons = '';
 
                 if (r.status === 'pending') {
-                  statusPill = '<span class="status-badge" style="background:#fef3e2; color:#b25e16;">รออนุมัติ</span>';
+                  statusPill = '<span class="status-badge pending">รออนุมัติ</span>';
                   actionButtons = `
                     <div class="request-actions">
                       <button class="button-success button-sm" data-action="approve" data-request-id="${r.id}">อนุมัติ</button>
