@@ -1323,3 +1323,4 @@ body{background:#f5faff}.app-shell{color:#173b60}.brand-mark{background:#1769aa;
 .requester-name{color:#173b60;font-size:13px}
 .requester-email{color:#54738b;font-size:12px;overflow-wrap:anywhere}
 .request-date{color:#8194a3}
+.member-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}

@@ -42,6 +42,20 @@ export function createApp(store: GroupStore, tokenSecret: string, serviceToken: 
     return response.json(result.value);
   });
 
+  app.delete("/internal/groups/:id/members", async (request: Request, response: Response) => {
+    if (request.header("x-service-token") !== serviceToken) {
+      return response.status(401).json({ error: "unauthorized", message: "Service token is invalid" });
+    }
+    const id = request.params["id"];
+    const userId = typeof request.body?.["userId"] === "string" ? request.body["userId"].trim() : "";
+    if (!userId) return response.status(400).json({ error: "validation_error", message: "userId must be a non-empty string" });
+    const result = await store.removeMember(typeof id === "string" ? id : "", userId);
+    if (result === "not_found") return response.status(404).json({ error: "not_found", message: "Group not found" });
+    if (result === "not_member") return response.status(404).json({ error: "not_found", message: "User is not a member of this group" });
+    if (result === "owner") return response.status(409).json({ error: "conflict", message: "Group owner cannot leave the group" });
+    return response.sendStatus(204);
+  });
+
   app.delete("/internal/groups/:id", async (request: Request, response: Response) => {
     if (request.header("x-service-token") !== serviceToken) {
       return response.status(401).json({ error: "unauthorized", message: "Service token is invalid" });

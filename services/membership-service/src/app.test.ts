@@ -52,6 +52,10 @@ class FakeGroupClient implements GroupClient {
     this.group.members.push(userId);
   }
 
+  async removeMember(_groupId: string, userId: string): Promise<void> {
+    this.group.members = this.group.members.filter((member) => member !== userId);
+  }
+
   async deleteGroup(groupId: string): Promise<void> {
     if (groupId !== this.group.id) throw new GroupServiceError(404, "Group not found");
     this.deleteGroupCalls += 1;

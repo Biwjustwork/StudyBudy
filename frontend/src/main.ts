@@ -22,6 +22,9 @@ const apiErrorTranslations: Record<string, string> = {
   'Group not found': 'ไม่พบกลุ่มที่เลือก กลุ่มนี้อาจถูกลบไปแล้ว',
   'Groups with other members cannot be deleted': 'ลบกลุ่มไม่ได้ เพราะยังมีสมาชิกคนอื่นอยู่',
   'Groups with membership request history cannot be deleted': 'ลบกลุ่มไม่ได้ เพราะมีประวัติคำขอเข้าร่วมอยู่',
+  'Groups with pending membership requests cannot be deleted': 'ลบกลุ่มไม่ได้ เพราะยังมีคำขอเข้าร่วมที่รออนุมัติอยู่',
+  'Group owner cannot leave the group; delete it instead': 'เจ้าของกลุ่มออกจากกลุ่มไม่ได้ หากต้องการปิดกลุ่มให้ใช้ปุ่มลบกลุ่ม',
+  'You are not a member of this group': 'คุณไม่ได้เป็นสมาชิกของกลุ่มนี้',
   'Only the group owner can delete this group': 'เฉพาะเจ้าของกลุ่มเท่านั้นที่ลบกลุ่มได้',
   'This group is already being changed': 'กลุ่มกำลังถูกแก้ไข กรุณาลองใหม่อีกครั้ง',
   'This group is being changed; try again': 'กลุ่มกำลังถูกแก้ไข กรุณาลองใหม่อีกครั้ง',
@@ -418,7 +421,7 @@ function renderGroups(groups: Group[]) {
             </button>
           </div>`;
       } else if (isMember) {
-        actionHtml = '<span class="badge-member">✓ คุณเป็นสมาชิกกลุ่มนี้แล้ว</span>';
+        actionHtml = `<div class="member-actions"><span class="badge-member">✓ คุณเป็นสมาชิกกลุ่มนี้แล้ว</span><button class="button button-quiet button-sm" data-action="leave-group" data-group-id="${escapeHtml(group.id)}">ออกจากกลุ่ม</button></div>`;
       } else if (isClosed || isFull) {
         actionHtml = '<button class="button button-quiet button-sm" disabled>ไม่สามารถเข้าร่วมได้</button>';
       } else {
@@ -469,6 +472,22 @@ function renderGroups(groups: Group[]) {
   groupsList.querySelectorAll('[data-action="view-requests"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       switchTab('requests');
+    });
+  });
+
+  groupsList.querySelectorAll<HTMLButtonElement>('[data-action="leave-group"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const groupId = btn.dataset.groupId;
+      if (!groupId || !window.confirm('ยืนยันออกจากกลุ่มนี้หรือไม่? คุณจะต้องส่งคำขอใหม่หากต้องการเข้าร่วมอีกครั้ง')) return;
+      btn.disabled = true;
+      try {
+        await apiRequest<void>(memberUrl, `/api/groups/${encodeURIComponent(groupId)}/leave`, { method: 'DELETE' });
+        showToast('ออกจากกลุ่มเรียบร้อยแล้ว');
+        void loadGroups(groupSearchInput.value, groupSearchOpenOnly.checked);
+      } catch (error) {
+        showToast((error as Error).message, true);
+        btn.disabled = false;
+      }
     });
   });
 }
@@ -568,10 +587,10 @@ async function loadRequests() {
                 </div>
                 <div class="owner-group-actions">
                   ${group.isOpen ? '<span class="status-badge open">เปิดรับ</span>' : '<span class="status-badge closed">ปิดรับ</span>'}
-                  <button class="button button-danger button-sm" data-action="delete-group" data-group-id="${escapeHtml(group.id)}" ${group.members.length !== 1 || reqs.length > 0 ? 'disabled title="ลบได้เมื่อยังไม่มีสมาชิกอื่นหรือประวัติคำขอ"' : ''}>ลบกลุ่ม</button>
+                  <button class="button button-danger button-sm" data-action="delete-group" data-group-id="${escapeHtml(group.id)}" ${group.members.length !== 1 || reqs.some((item) => item.status === 'pending') ? 'disabled title="ลบได้เมื่อเหลือเฉพาะเจ้าของและไม่มีคำขอที่รออนุมัติ"' : ''}>ลบกลุ่ม</button>
                 </div>
               </div>
-              ${group.members.length !== 1 || reqs.length > 0 ? '<small class="delete-group-hint">ลบได้เมื่อมีเฉพาะเจ้าของและยังไม่มีประวัติคำขอเข้าร่วม</small>' : ''}
+              ${group.members.length !== 1 || reqs.some((item) => item.status === 'pending') ? '<small class="delete-group-hint">ลบได้เมื่อเหลือเฉพาะเจ้าของและไม่มีคำขอที่รออนุมัติ</small>' : ''}
               <div class="requests-table">
                 ${reqRows}
               </div>
@@ -617,7 +636,7 @@ async function loadRequests() {
       btn.addEventListener('click', async () => {
         const groupId = btn.dataset.groupId;
         if (!groupId || btn.disabled) return;
-        if (!window.confirm('ยืนยันลบกลุ่มนี้หรือไม่? การลบนี้ไม่สามารถย้อนกลับได้')) return;
+        if (!window.confirm('ยืนยันลบกลุ่มนี้หรือไม่? การลบไม่สามารถย้อนกลับได้ และสมาชิกจะไม่สามารถเข้าถึงกลุ่มนี้อีก')) return;
         btn.disabled = true;
         try {
           await apiRequest<void>(memberUrl, `/api/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });

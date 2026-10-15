@@ -29,6 +29,7 @@ All `/api` routes require `Authorization: Bearer <token>`. The owner is always t
 | GET | `/api/groups/:id` | Read one group; 404 if absent |
 | PATCH | `/api/groups/:id` | Owner-only partial update of `subject/topic/startsAt/location/maxMembers/isOpen`; 403 for non-owners |
 | DELETE | `/internal/groups/:id` | Membership Service only, via `x-service-token`; deletes a group only when the owner is its sole member; `204` on success and `409` if other members remain |
+| DELETE | `/internal/groups/:id/members` | Membership Service only, via `x-service-token`; removes the specified non-owner member using `{ "userId": "..." }`; `204` on success |
 | POST | `/internal/groups/:id/members` | Server-to-server seat reservation with header `x-service-token: $SERVICE_TOKEN` ONLY (no Bearer); see member-4 contract below |
 
 ```powershell

@@ -111,6 +111,7 @@ Group Service เก็บข้อมูลกลุ่มในไฟล์ JS
 - `PATCH /api/groups/:id`: เจ้าของกลุ่มเท่านั้นแก้ข้อมูลกลุ่ม; ผู้ใช้อื่นตอบ `403`, กลุ่มไม่มีตอบ `404`
 - `POST /internal/groups/:id/members`: สำหรับ Membership Service เพิ่มสมาชิกแบบ atomic เมื่อกลุ่มยังไม่เต็ม; ตรวจ `X-Service-Token`; สำเร็จ `200` คืนจำนวนสมาชิกใหม่, กลุ่มเต็มตอบ `422`, เพิ่ม user ซ้ำตอบ `409`
 - `DELETE /internal/groups/:id`: สำหรับ Membership Service ลบกลุ่มผ่าน `X-Service-Token`; ลบได้เมื่อ owner เป็นสมาชิกเพียงคนเดียว สำเร็จ `204`; สมาชิกอื่นยังอยู่ตอบ `409`; group ไม่มีตอบ `404`; token หาย/ผิดตอบ `401`
+- `DELETE /internal/groups/:id/members`: Membership Service นำสมาชิกออกด้วย body `{ "userId": "user-123" }` และ `X-Service-Token`; สำเร็จ `204`; เจ้าของออกไม่ได้และตอบ `409`
 
 ข้อมูลสร้าง/แก้ไขต้องมี subject และ topic ที่ไม่ว่าง, startsAt เป็น ISO 8601 พร้อม timezone, maxMembers เป็นจำนวนเต็มบวก และ location ไม่เป็นค่าว่าง; ข้อมูลผิดตอบ `400`
 
@@ -120,9 +121,10 @@ Membership Service เก็บคำขอในไฟล์ JSON ของต�
 
 ตัวตนผู้ขอและผู้ตัดสินมาจาก JWT
 
-- `POST /api/requests`: body `{ "groupId": "group-123" }`; สร้างคำขอ `pending` โดยใช้ userId จาก token; สำเร็จ `201` คืน request; คำขอซ้ำตอบ `409`; กลุ่มไม่มีตอบ `404`; กลุ่มเต็มตอบ `422`
+- `POST /api/requests`: body `{ "groupId": "group-123" }`; สร้างคำขอ `pending` โดยใช้ userId จาก token; สำเร็จ `201` คืน request; คำขอที่ยัง `pending` ซ้ำตอบ `409`; ส่งคำขอใหม่ได้หลังคำขอก่อนหน้าถูกปฏิเสธ; กลุ่มไม่มีตอบ `404`; กลุ่มเต็มตอบ `422`
 - `GET /api/requests?groupId=group-123`: เจ้าของกลุ่มเท่านั้นดูรายการคำขอได้; สำเร็จ `200` คืน array โดยแต่ละรายการเพิ่ม `requesterName` และ `requesterEmail` จาก Profile Service
-- `DELETE /api/groups/:id`: เจ้าของกลุ่มเท่านั้นลบกลุ่มได้ผ่าน Membership Service; ต้องไม่มีสมาชิกอื่นนอกจากเจ้าของและไม่มีประวัติคำขอ; สำเร็จ `204`, เงื่อนไขไม่ครบตอบ `409`; Membership ประสาน Group Service ผ่าน `DELETE /internal/groups/:id` และ service token
+- `DELETE /api/groups/:id`: เจ้าของกลุ่มเท่านั้นลบกลุ่มได้ผ่าน Membership Service; ต้องไม่มีสมาชิกอื่นนอกจากเจ้าของและไม่มีคำขอที่ยัง pending; สำเร็จ `204`, เงื่อนไขไม่ครบตอบ `409`; Membership ประสาน Group Service ผ่าน `DELETE /internal/groups/:id` และ service token
+- `DELETE /api/groups/:id/leave`: สมาชิกที่ไม่ใช่เจ้าของออกจากกลุ่มได้; สำเร็จ `204`; ผู้ที่ไม่ได้เป็นสมาชิกตอบ `409`; เจ้าของต้องลบกลุ่มแทน
 - `POST /api/requests/:id/approve`: เจ้าของกลุ่มอนุมัติ; ก่อนบันทึกสถานะต้องเรียก `POST /internal/groups/:id/members`; เพิ่มสมาชิกสำเร็จแล้วจึงเปลี่ยนสถานะเป็น `approved`; คำขอที่ตัดสินแล้วตอบ `409`
 - `POST /api/requests/:id/reject`: เจ้าของกลุ่มปฏิเสธ; สำเร็จคืน request สถานะ `rejected`; ผู้ไม่มีสิทธิ์ตอบ `403`; request/group ไม่มีตอบ `404`
 

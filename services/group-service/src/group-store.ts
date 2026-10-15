@@ -121,6 +121,21 @@ export class GroupStore {
     });
   }
 
+  async removeMember(id: string, userId: string): Promise<"removed" | "not_found" | "not_member" | "owner"> {
+    return this.serialize(async () => {
+      const group = this.groups.get(id);
+      if (!group) return "not_found";
+      if (group.ownerId === userId) return "owner";
+      if (!group.members.includes(userId)) return "not_member";
+      const updated = { ...group, members: group.members.filter((member) => member !== userId), updatedAt: new Date().toISOString() };
+      const next = new Map(this.groups);
+      next.set(id, updated);
+      await this.persist(next);
+      this.groups = next;
+      return "removed";
+    });
+  }
+
   private serialize<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.writeQueue.then(operation);
     this.writeQueue = result.then(() => undefined, () => undefined);

@@ -122,10 +122,33 @@ export function createApp(
       if (group.members.length !== 1 || group.members[0] !== group.ownerId) {
         return response.status(409).json({ error: "conflict", message: "Groups with other members cannot be deleted" });
       }
-      if (store.listByGroup(groupId).length > 0) {
-        return response.status(409).json({ error: "conflict", message: "Groups with membership request history cannot be deleted" });
+      if (store.listByGroup(groupId).some((item) => item.status === "pending")) {
+        return response.status(409).json({ error: "conflict", message: "Groups with pending membership requests cannot be deleted" });
       }
       await groupClient.deleteGroup(groupId);
+      return response.sendStatus(204);
+    } catch (error) {
+      return sendGroupError(response, error);
+    } finally {
+      store.endGroupOperation(groupId);
+    }
+  });
+
+  app.delete("/api/groups/:id/leave", async (request: AuthenticatedRequest, response: Response) => {
+    const groupId = request.params["id"];
+    if (typeof groupId !== "string" || !store.beginGroupOperation(groupId)) {
+      return response.status(409).json({ error: "conflict", message: "This group is already being changed" });
+    }
+    try {
+      const group = await groupClient.getGroup(groupId, request.bearerToken as string);
+      const userId = request.userId as string;
+      if (group.ownerId === userId) {
+        return response.status(409).json({ error: "conflict", message: "Group owner cannot leave the group; delete it instead" });
+      }
+      if (!group.members.includes(userId)) {
+        return response.status(409).json({ error: "conflict", message: "You are not a member of this group" });
+      }
+      await groupClient.removeMember(groupId, userId);
       return response.sendStatus(204);
     } catch (error) {
       return sendGroupError(response, error);

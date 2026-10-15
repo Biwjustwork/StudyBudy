@@ -13,9 +13,10 @@ All `/api` endpoints require an Auth Service JWT signed with HS256 and containin
 | GET | `/api/requests?groupId=...` | Group owner only; returns requests in creation order |
 | POST | `/api/requests/:id/approve` | Owner only; reserves a Group seat before marking the request `approved` |
 | POST | `/api/requests/:id/reject` | Owner only; marks a pending request `rejected` |
-| DELETE | `/api/groups/:id` | Owner only; deletes a group only when the owner is its sole member and it has no membership request history (`204`; otherwise `409`) |
+| DELETE | `/api/groups/:id` | Owner only; deletes a group only when the owner is its sole member and no request is pending (`204`; otherwise `409`) |
+| DELETE | `/api/groups/:id/leave` | A non-owner member leaves a group (`204`); owners must delete their group instead |
 
-Requests are unique per `(groupId, requesterId)`, including after a decision. Owner request lists include `requesterName` and `requesterEmail`, resolved from Profile Service; the requester ID remains available as a technical field. A full or closed group returns `422`; repeated requests or decisions return `409`. A decision response includes `notificationStatus` (`sent` or `pending`) and, if pending, a `notificationLastError` to make an undelivered event visible.
+Only one pending request is allowed per `(groupId, requesterId)`; after rejection, the requester may apply again. Owner request lists include `requesterName` and `requesterEmail`, resolved from Profile Service; the requester ID remains available as a technical field. A full or closed group returns `422`; repeated pending requests or decisions return `409`. A decision response includes `notificationStatus` (`sent` or `pending`) and, if pending, a `notificationLastError` to make an undelivered event visible.
 
 ## Cross-service behavior and recovery
 

@@ -65,7 +65,7 @@ export class RequestStore {
 
   find(groupId: string, requesterId: string): MembershipRequest | undefined {
     const request = [...this.requests.values()].find(
-      (item) => item.groupId === groupId && item.requesterId === requesterId,
+      (item) => item.groupId === groupId && item.requesterId === requesterId && item.status === "pending",
     );
     return request ? structuredClone(request) : undefined;
   }

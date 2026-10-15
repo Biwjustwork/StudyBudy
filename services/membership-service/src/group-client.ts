@@ -9,6 +9,7 @@ export type GroupSnapshot = {
 export interface GroupClient {
   getGroup(groupId: string, bearerToken: string): Promise<GroupSnapshot>;
   addMember(groupId: string, userId: string): Promise<void>;
+  removeMember(groupId: string, userId: string): Promise<void>;
   deleteGroup(groupId: string): Promise<void>;
 }
 
@@ -54,6 +55,14 @@ export class HttpGroupClient implements GroupClient {
       body: JSON.stringify({ userId }),
     });
     if (response.status !== 200) throw new GroupServiceError(502, "Group Service returned an unexpected response");
+  }
+
+  async removeMember(groupId: string, userId: string): Promise<void> {
+    await this.request(`/internal/groups/${encodeURIComponent(groupId)}/members`, undefined, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", "X-Service-Token": this.serviceToken },
+      body: JSON.stringify({ userId }),
+    });
   }
 
   async deleteGroup(groupId: string): Promise<void> {
