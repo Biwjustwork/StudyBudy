@@ -1,0 +1,26 @@
+{
+  "name": "study-buddy-notification-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "In-app notification API for Study Buddy",
+  "engines": { "node": ">=22.9.0" },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --import tsx --watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "test": "tsx --test src/app.test.ts"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.15.30",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

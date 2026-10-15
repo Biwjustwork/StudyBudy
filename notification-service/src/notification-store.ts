@@ -1,0 +1,131 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+
+export type NotificationEvent = {
+  userId: string;
+  type: "request_approved" | "request_rejected";
+  message: string;
+  relatedId: string;
+};
+
+export type Notification = NotificationEvent & {
+  id: string;
+  read: boolean;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export class NotificationConflictError extends Error {}
+
+function eventKey(event: NotificationEvent): string {
+  return JSON.stringify([event.userId, event.relatedId, event.type]);
+}
+
+export class NotificationStore {
+  private notifications = new Map<string, Notification>();
+  private writeQueue: Promise<unknown> = Promise.resolve();
+
+  private constructor(private readonly filePath: string) {}
+
+  static async open(filePath: string): Promise<NotificationStore> {
+    if (!filePath.trim()) throw new Error("NOTIFICATION_DATA_FILE must be a non-empty path");
+    const store = new NotificationStore(filePath);
+    let contents: string;
+    try {
+      contents = await readFile(filePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      await store.persist([]);
+      return store;
+    }
+    const records: unknown = JSON.parse(contents);
+    if (!Array.isArray(records) || !records.every(isNotification)) {
+      throw new Error("Notification data must be an array of valid records");
+    }
+    const eventKeys = new Set<string>();
+    for (const record of records) {
+      const key = eventKey(record);
+      if (store.notifications.has(record.id) || eventKeys.has(key)) {
+        throw new Error("Notification data contains duplicate IDs or events");
+      }
+      store.notifications.set(record.id, record);
+      eventKeys.add(key);
+    }
+    return store;
+  }
+
+  list(userId: string): Notification[] {
+    // Reverse insertion order makes events created in the same millisecond deterministic.
+    return [...this.notifications.values()].reverse()
+      .filter((notification) => notification.userId === userId)
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+      .map((notification) => structuredClone(notification));
+  }
+
+  async create(event: NotificationEvent): Promise<{ created: boolean; notification: Notification }> {
+    return this.serialize(async () => {
+      const existing = [...this.notifications.values()].find((item) => eventKey(item) === eventKey(event));
+      if (existing) {
+        if (existing.message !== event.message) throw new NotificationConflictError("Event message conflicts with the saved notification");
+        return { created: false, notification: structuredClone(existing) };
+      }
+      const notification: Notification = {
+        ...event, id: randomUUID(), read: false, createdAt: new Date().toISOString(), readAt: null,
+      };
+      const next = new Map(this.notifications);
+      next.set(notification.id, notification);
+      await this.persist([...next.values()]);
+      this.notifications = next;
+      return { created: true, notification: structuredClone(notification) };
+    });
+  }
+
+  async markRead(id: string, userId: string): Promise<
+    { status: "ok"; notification: Notification } | { status: "not_found" } | { status: "forbidden" }
+  > {
+    return this.serialize(async () => {
+      const existing = this.notifications.get(id);
+      if (!existing) return { status: "not_found" };
+      if (existing.userId !== userId) return { status: "forbidden" };
+      if (existing.read) return { status: "ok", notification: structuredClone(existing) };
+      const updated = { ...existing, read: true, readAt: new Date().toISOString() };
+      const next = new Map(this.notifications);
+      next.set(id, updated);
+      // Publish the new state only after disk persistence succeeds.
+      await this.persist([...next.values()]);
+      this.notifications = next;
+      return { status: "ok", notification: structuredClone(updated) };
+    });
+  }
+
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.writeQueue.then(operation);
+    this.writeQueue = result.catch(() => {});
+    return result;
+  }
+
+  private async persist(records: Notification[]): Promise<void> {
+    await mkdir(dirname(this.filePath), { recursive: true });
+    const temporaryPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporaryPath, `${JSON.stringify(records, null, 2)}\n`, "utf8");
+      await rename(temporaryPath, this.filePath);
+    } catch (error) {
+      await unlink(temporaryPath).catch(() => {});
+      throw error;
+    }
+  }
+}
+
+function isNotification(value: unknown): value is Notification {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Partial<Notification>;
+  const nonEmpty = (text: unknown): text is string => typeof text === "string" && text.trim().length > 0;
+  const timestamp = (text: unknown): text is string => nonEmpty(text) && Number.isFinite(Date.parse(text));
+  return nonEmpty(record.id) && nonEmpty(record.userId) && nonEmpty(record.relatedId)
+    && nonEmpty(record.message) && record.message.length <= 2000
+    && (record.type === "request_approved" || record.type === "request_rejected")
+    && timestamp(record.createdAt)
+    && ((record.read === false && record.readAt === null) || (record.read === true && timestamp(record.readAt)));
+}

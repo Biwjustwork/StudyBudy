@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/
+.git/
+.env
+.env.*
+!.env.example
+src/**/*.test.ts
+README.md
+HANDOFF.md
+npm-debug.log*

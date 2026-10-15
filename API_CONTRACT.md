@@ -130,6 +130,15 @@ Notification Service เก็บรายการแจ้งเตือน�
 - `GET /api/notifications`: ต้องมี Bearer token; คืนเฉพาะรายการของ userId ใน token เรียงใหม่ไปเก่า
 - `PATCH /api/notifications/:id/read`: ทำเครื่องหมายอ่านแล้วได้เฉพาะ notification ของตน; สำเร็จ `200`, ไม่มีรายการตอบ `404`, เป็นของผู้อื่นตอบ `403`
 
+รายละเอียดสำหรับเชื่อม Membership → Notification (สมาชิก 4 และ 5):
+
+- ตั้ง `NOTIFY_SERVICE_TOKEN` ค่าเดียวกันใน Membership และ Notification แล้วส่งใน `X-Service-Token`; ค่า `NOTIFY_URL` ฝั่ง Membership ชี้ Notification port 3005 ตาม environment ที่ทีมจัดให้ ห้ามส่ง service token ไป browser
+- `type` รับ `request_approved` และ `request_rejected`; `userId` คือ requester จากคำขอที่บันทึกไว้ และ `relatedId` คือ request ID ทุก field ต้องเป็น string ไม่ว่างหลัง trim และ `message` ไม่เกิน 2,000 ตัวอักษร; ข้อมูลผิดตอบ `400`, internal token หาย/ผิดตอบ `401`
+- Notification object มี `{ id, userId, type, message, relatedId, read, createdAt, readAt }`; สร้างใหม่มี `read: false`, `readAt: null`; เวลาเป็น ISO 8601 UTC เมื่อ mark-read มี `read: true` และ `readAt` เป็นเวลาที่อ่านครั้งแรก การ mark ซ้ำคืนรายการเดิมด้วย `200`
+- เพื่อรองรับ retry โดยไม่แจ้งซ้ำ ใช้ `(userId, relatedId, type)` เป็น event key: ครั้งแรกตอบ `201`; ส่ง payload เดิมซ้ำตอบ `200` พร้อม notification เดิมและคง read state; key เดิมแต่ message ต่างตอบ `409` โดยไม่เขียนทับ Membership ต้องถือทั้ง `200` และ `201` ว่าส่งสำเร็จ
+- Membership ต้องบันทึก event ที่ยังส่งไม่สำเร็จเพื่อ retry payload เดิมภายหลัง โดยไม่ตัดสินคำขอหรือเพิ่มสมาชิกซ้ำ; Notification เก็บเฉพาะ JSON ของตนผ่าน `NOTIFICATION_DATA_FILE` และ Docker volume แยก ใช้หนึ่ง process/replica ต่อไฟล์
+- `GET /api/notifications` คืนเฉพาะ userId ใน token เสมอ ไม่รับ userId จาก query; การพยายามดูของผู้อื่นด้วย query จึงไม่เปิดเผยรายการนั้น ส่วนการ mark รายการของผู้อื่นตอบ `403` ตามเดิม
+
 ## 8. การเปลี่ยนสัญญา
 
 ผู้แก้ API ต้องปรับเอกสารนี้และเพิ่ม/แก้ test ที่เกี่ยวข้องใน PR เดียวกับการเปลี่ยนโค้ด ระบุ consumer ที่ได้รับผลกระทบ และแจ้งเจ้าของ service ปลายทางก่อน merge; ห้ามเปลี่ยนชื่อ field, status code หรือสิทธิ์แบบเงียบ ๆ
