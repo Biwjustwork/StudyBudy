@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 export type Group = {
@@ -46,7 +46,7 @@ export class GroupStore {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       await mkdir(dirname(filePath), { recursive: true });
-      await store.persist();
+      await store.persist(store.groups);
     }
     return store;
   }
@@ -61,64 +61,82 @@ export class GroupStore {
   }
 
   async create(input: CreateGroupInput): Promise<Group> {
-    const now = new Date().toISOString();
-    const group: Group = {
-      id: randomUUID(),
-      subject: input.subject,
-      topic: input.topic,
-      startsAt: input.startsAt,
-      maxMembers: input.maxMembers,
-      location: input.location,
-      ownerId: input.ownerId,
-      members: [...input.members],
-      isOpen: input.isOpen,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.groups.set(group.id, group);
-    await this.persist();
-    return structuredClone(group);
+    return this.serialize(async () => {
+      const now = new Date().toISOString();
+      const group: Group = {
+        id: randomUUID(), subject: input.subject, topic: input.topic, startsAt: input.startsAt,
+        maxMembers: input.maxMembers, location: input.location, ownerId: input.ownerId,
+        members: [...input.members], isOpen: input.isOpen, createdAt: now, updatedAt: now,
+      };
+      const next = new Map(this.groups);
+      next.set(group.id, group);
+      await this.persist(next);
+      this.groups = next;
+      return structuredClone(group);
+    });
+  }
+
+  async deleteIfOwnerAlone(id: string): Promise<"deleted" | "not_found" | "not_empty"> {
+    return this.serialize(async () => {
+      const group = this.groups.get(id);
+      if (!group) return "not_found";
+      if (group.members.length !== 1 || group.members[0] !== group.ownerId) return "not_empty";
+      const next = new Map(this.groups);
+      next.delete(id);
+      await this.persist(next);
+      this.groups = next;
+      return "deleted";
+    });
   }
 
   async update(id: string, patch: Partial<Omit<Group, "id" | "createdAt">>): Promise<Group | undefined> {
-    const existing = this.groups.get(id);
-    if (!existing) return undefined;
-    const updated: Group = {
-      ...existing,
-      ...patch,
-      id: existing.id,
-      createdAt: existing.createdAt,
-      updatedAt: new Date().toISOString(),
-    };
-    this.groups.set(id, updated);
-    await this.persist();
-    return structuredClone(updated);
+    return this.serialize(async () => {
+      const existing = this.groups.get(id);
+      if (!existing) return undefined;
+      const updated: Group = {
+        ...existing, ...patch, id: existing.id,
+        createdAt: existing.createdAt, updatedAt: new Date().toISOString(),
+      };
+      const next = new Map(this.groups);
+      next.set(id, updated);
+      await this.persist(next);
+      this.groups = next;
+      return structuredClone(updated);
+    });
   }
 
   async addMember(id: string, userId: string): Promise<{ ok: true; value: Group } | { ok: false; error: "not_found" | "conflict" | "capacity_exceeded" | "closed" }> {
-    // จองที่นั่งแบบ atomic: อ่าน-เช็ก-เพิ่มในจังหวะเดียว ห้ามมี await คั่น (กันแย่งที่นั่งสุดท้าย)
-    // ลำดับเช็ก: กลุ่มปิด > เป็นสมาชิกแล้ว > เต็ม
-    const group = this.groups.get(id);
-    if (!group) return { ok: false, error: "not_found" };
-    if (!group.isOpen) return { ok: false, error: "closed" };
-    if (group.members.includes(userId)) return { ok: false, error: "conflict" };
-    if (group.members.length >= group.maxMembers) return { ok: false, error: "capacity_exceeded" };
-    group.members.push(userId);
-    group.updatedAt = new Date().toISOString();
-    await this.persist();
-    return { ok: true, value: structuredClone(group) };
+    return this.serialize(async () => {
+      const group = this.groups.get(id);
+      if (!group) return { ok: false, error: "not_found" };
+      if (!group.isOpen) return { ok: false, error: "closed" };
+      if (group.members.includes(userId)) return { ok: false, error: "conflict" };
+      if (group.members.length >= group.maxMembers) return { ok: false, error: "capacity_exceeded" };
+      const updated = { ...group, members: [...group.members, userId], updatedAt: new Date().toISOString() };
+      const next = new Map(this.groups);
+      next.set(id, updated);
+      await this.persist(next);
+      this.groups = next;
+      return { ok: true, value: structuredClone(updated) };
+    });
   }
 
-  private async persist(): Promise<void> {
-    // เซฟลง disk แบบต่อคิว + เขียนไฟล์ tmp แล้ว rename (กันไฟล์พังตอนเขียนค้าง)
-    // shortcut: เขียนพังครั้งหนึ่งต้องไม่ทำคิวพังถาวร ใช้ได้แค่ instance เดียว — มีหลาย instance ค่อยเปลี่ยนเป็น DB จริง
-    this.writeQueue = this.writeQueue.catch(() => {}).then(async () => {
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.writeQueue.then(operation);
+    this.writeQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private async persist(groups: Map<string, Group>): Promise<void> {
+    const temporaryPath = `${this.filePath}.tmp`;
+    try {
       await mkdir(dirname(this.filePath), { recursive: true });
-      const temporaryPath = `${this.filePath}.tmp`;
-      await writeFile(temporaryPath, JSON.stringify([...this.groups.values()], null, 2), "utf8");
+      await writeFile(temporaryPath, JSON.stringify([...groups.values()], null, 2), "utf8");
       await rename(temporaryPath, this.filePath);
-    });
-    return this.writeQueue;
+    } catch (error) {
+      await unlink(temporaryPath).catch(() => {});
+      throw error;
+    }
   }
 }
 

@@ -20,6 +20,11 @@ const apiErrorTranslations: Record<string, string> = {
   'Token is invalid or expired': 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
   'Token must contain a valid userId and exp': 'ข้อมูลเซสชันไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่',
   'Group not found': 'ไม่พบกลุ่มที่เลือก กลุ่มนี้อาจถูกลบไปแล้ว',
+  'Groups with other members cannot be deleted': 'ลบกลุ่มไม่ได้ เพราะยังมีสมาชิกคนอื่นอยู่',
+  'Groups with membership request history cannot be deleted': 'ลบกลุ่มไม่ได้ เพราะมีประวัติคำขอเข้าร่วมอยู่',
+  'Only the group owner can delete this group': 'เฉพาะเจ้าของกลุ่มเท่านั้นที่ลบกลุ่มได้',
+  'This group is already being changed': 'กลุ่มกำลังถูกแก้ไข กรุณาลองใหม่อีกครั้ง',
+  'This group is being changed; try again': 'กลุ่มกำลังถูกแก้ไข กรุณาลองใหม่อีกครั้ง',
   'User is already a member of this group': 'คุณเป็นสมาชิกกลุ่มนี้อยู่แล้ว',
   'Only the group owner can view requests': 'เฉพาะเจ้าของกลุ่มเท่านั้นที่ดูคำขอเข้าร่วมได้',
   'Only the group owner can decide requests': 'เฉพาะเจ้าของกลุ่มเท่านั้นที่อนุมัติหรือปฏิเสธคำขอได้',
@@ -100,6 +105,8 @@ type MembershipRequest = {
   createdAt: string;
   decidedAt?: string;
   decidedBy?: string;
+  requesterName?: string;
+  requesterEmail?: string;
 };
 
 type NotificationItem = {
@@ -537,7 +544,8 @@ async function loadRequests() {
                 return `
                   <div class="request-row">
                     <div class="requester-info">
-                      <span class="requester-id">ผู้ขอ: <code>${escapeHtml(r.requesterId)}</code></span>
+                      <strong class="requester-name">${escapeHtml(r.requesterName || 'ไม่พบชื่อผู้ขอ')}</strong>
+                      <span class="requester-email">${escapeHtml(r.requesterEmail || 'ไม่พบอีเมล')}</span>
                       <span class="request-date">ส่งเมื่อ: ${formatDate(r.createdAt)}</span>
                     </div>
                     <div style="display:flex; align-items:center; gap:12px;">
@@ -558,8 +566,12 @@ async function loadRequests() {
                   <div class="owner-group-title" style="margin-top:6px;">${escapeHtml(group.topic)}</div>
                   <small class="muted">สมาชิกปัจจุบัน: ${group.members.length} / ${group.maxMembers} คน</small>
                 </div>
-                ${group.isOpen ? '<span class="status-badge open">เปิดรับ</span>' : '<span class="status-badge closed">ปิดรับ</span>'}
+                <div class="owner-group-actions">
+                  ${group.isOpen ? '<span class="status-badge open">เปิดรับ</span>' : '<span class="status-badge closed">ปิดรับ</span>'}
+                  <button class="button button-danger button-sm" data-action="delete-group" data-group-id="${escapeHtml(group.id)}" ${group.members.length !== 1 || reqs.length > 0 ? 'disabled title="ลบได้เมื่อยังไม่มีสมาชิกอื่นหรือประวัติคำขอ"' : ''}>ลบกลุ่ม</button>
+                </div>
               </div>
+              ${group.members.length !== 1 || reqs.length > 0 ? '<small class="delete-group-hint">ลบได้เมื่อมีเฉพาะเจ้าของและยังไม่มีประวัติคำขอเข้าร่วม</small>' : ''}
               <div class="requests-table">
                 ${reqRows}
               </div>
@@ -598,6 +610,24 @@ async function loadRequests() {
       btn.addEventListener('click', (e) => {
         const rId = (e.currentTarget as HTMLElement).getAttribute('data-request-id');
         if (rId) void handleDecision(rId, 'reject');
+      });
+    });
+
+    ownerGroupsContainer.querySelectorAll<HTMLButtonElement>('[data-action="delete-group"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const groupId = btn.dataset.groupId;
+        if (!groupId || btn.disabled) return;
+        if (!window.confirm('ยืนยันลบกลุ่มนี้หรือไม่? การลบนี้ไม่สามารถย้อนกลับได้')) return;
+        btn.disabled = true;
+        try {
+          await apiRequest<void>(memberUrl, `/api/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+          showToast('ลบกลุ่มเรียบร้อยแล้ว');
+          void loadRequests();
+          void loadGroups(groupSearchInput.value, groupSearchOpenOnly.checked);
+        } catch (error) {
+          showToast((error as Error).message, true);
+          btn.disabled = false;
+        }
       });
     });
   } catch (error) {

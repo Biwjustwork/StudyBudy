@@ -1316,3 +1316,10 @@ body{background:#f5faff}.app-shell{color:#173b60}.brand-mark{background:#1769aa;
 .button-success:hover{background:#1c6ea9}
 .tab-badge{background:#69a9d3;color:#fff}
 .noti-badge-type.pending{background:#edf7ff;color:#397da8}
+.owner-group-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.owner-group-actions .button:disabled{opacity:.48;cursor:not-allowed}
+.delete-group-hint{display:block;margin:10px 0 0;color:#6a8193;font-size:11px}
+.requester-info{display:grid;gap:3px}
+.requester-name{color:#173b60;font-size:13px}
+.requester-email{color:#54738b;font-size:12px;overflow-wrap:anywhere}
+.request-date{color:#8194a3}

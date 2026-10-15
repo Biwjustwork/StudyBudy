@@ -53,6 +53,8 @@ services:
       AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
       GROUP_URL: http://group-service:3003
       SERVICE_TOKEN: ${GROUP_SERVICE_TOKEN:-replace-with-shared-group-service-token}
+      PROFILE_URL: http://profile-service:3002
+      PROFILE_SERVICE_TOKEN: ${PROFILE_SERVICE_TOKEN:-replace-with-shared-profile-service-token}
       MEMBERSHIP_DATA_FILE: /app/data/requests.json
       NOTIFY_URL: http://notification-service:3005
       NOTIFY_SERVICE_TOKEN: ${NOTIFY_SERVICE_TOKEN:-replace-with-shared-notification-service-token}
@@ -60,6 +62,8 @@ services:
       - membership-data:/app/data
     depends_on:
       group-service:
+        condition: service_started
+      profile-service:
         condition: service_started
       notification-service:
         condition: service_started

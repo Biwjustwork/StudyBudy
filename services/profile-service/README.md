@@ -22,6 +22,7 @@ All `/api` routes require `Authorization: Bearer <token>`. Profile GET/PUT only 
 | --- | --- | --- |
 | GET | `/health` | Liveness check |
 | POST | `/internal/users` | Provision a profile from Auth; requires `X-Service-Token` and `{ "id": "user-123", "name": "Aun", "email": "student@example.com" }` |
+| POST | `/internal/users/lookup` | Membership only; requires `X-Service-Token` and `{ "ids": ["user-123"] }`; returns only matching `{ id, name, email }` profiles (no subjects) |
 | GET | `/api/users/:id` | Read own profile and subjects; 404 if absent |
 | PUT | `/api/users/:id` | Replace own subject list, e.g. `{ "subjects": ["Biology", "Calculus"] }` |
 | GET | `/api/users/search?subject=Biology` | Find profiles interested in a subject; returns `[]` when none match |
@@ -29,6 +30,8 @@ All `/api` routes require `Authorization: Bearer <token>`. Profile GET/PUT only 
 Subject names are trimmed, must be non-empty strings, and may not repeat (case-insensitive). API errors, including unknown URLs, use `{ "error": "...", "message": "..." }`. Status codes: 400 invalid input, 401 missing/invalid/expired token, 403 another user's profile, 404 unknown user/route, 200 success.
 
 For `POST /internal/users`, a new profile returns 201, an identical retry returns 200 with the existing profile, and a reused ID with a different name or email returns 409 without changing the stored profile. Missing/incorrect service token returns 401; invalid fields return 400.
+
+Membership Service uses the authenticated owner request flow before calling `POST /internal/users/lookup`; the lookup shares `PROFILE_SERVICE_TOKEN` with Auth provisioning, accepts up to 500 IDs per request, and returns only display names/emails for IDs that exist. The internal token must never be sent to the browser.
 
 ## Commands
 

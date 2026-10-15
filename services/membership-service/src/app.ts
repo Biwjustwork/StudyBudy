@@ -3,6 +3,7 @@ import jwt, { type JwtPayload } from "jsonwebtoken";
 import { type GroupClient, GroupServiceError } from "./group-client.js";
 import { deliverNotification } from "./notification-delivery.js";
 import { type NotificationClient } from "./notification-client.js";
+import { type ProfileClient, ProfileServiceError } from "./profile-client.js";
 import { type MembershipRequest, RequestStore } from "./request-store.js";
 
 type AuthenticatedRequest = Request & { userId?: string; bearerToken?: string };
@@ -12,6 +13,7 @@ export function createApp(
   tokenSecret: string,
   groupClient: GroupClient,
   notificationClient: NotificationClient,
+  profileClient: ProfileClient = { getProfiles: async () => [] },
 ) {
   if (tokenSecret.trim().length < 32) throw new Error("AUTH_TOKEN_SECRET must be at least 32 characters long");
   const app = express();
@@ -19,7 +21,7 @@ export function createApp(
   app.use(express.json({ limit: "32kb" }));
   app.use((request, response, next) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
-    response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    response.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
     response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
     if (request.method === "OPTIONS") return response.sendStatus(204);
     next();
@@ -52,10 +54,13 @@ export function createApp(
     if (groupId.length === 0) {
       return response.status(400).json({ error: "validation_error", message: "groupId must be a non-empty string" });
     }
-    if (store.find(groupId, request.userId as string)) {
-      return response.status(409).json({ error: "conflict", message: "A request already exists for this user and group" });
+    if (!store.beginGroupOperation(groupId)) {
+      return response.status(409).json({ error: "conflict", message: "This group is being changed; try again" });
     }
     try {
+      if (store.find(groupId, request.userId as string)) {
+        return response.status(409).json({ error: "conflict", message: "A request already exists for this user and group" });
+      }
       const group = await groupClient.getGroup(groupId, request.bearerToken as string);
       if (group.ownerId === request.userId || group.members.includes(request.userId as string)) {
         return response.status(409).json({ error: "conflict", message: "User is already a group member or owner" });
@@ -70,6 +75,8 @@ export function createApp(
       return response.status(201).json(publicRequest(created));
     } catch (error) {
       return sendGroupError(response, error);
+    } finally {
+      store.endGroupOperation(groupId);
     }
   });
 
@@ -83,9 +90,47 @@ export function createApp(
       if (group.ownerId !== request.userId) {
         return response.status(403).json({ error: "forbidden", message: "Only the group owner can view requests" });
       }
-      return response.json(store.listByGroup(groupId).map(publicRequest));
+      const requests = store.listByGroup(groupId);
+      const profiles = await profileClient.getProfiles(requests.map((item) => item.requesterId));
+      const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
+      return response.json(requests.map((item) => {
+        const profile = profilesById.get(item.requesterId);
+        return {
+          ...publicRequest(item),
+          requesterName: profile?.name ?? "ไม่พบข้อมูลชื่อผู้ขอ",
+          requesterEmail: profile?.email ?? "ไม่พบอีเมล",
+        };
+      }));
+    } catch (error) {
+      if (error instanceof ProfileServiceError) {
+        return response.status(error.status).json({ error: "dependency_unavailable", message: "Profile Service is unavailable" });
+      }
+      return sendGroupError(response, error);
+    }
+  });
+
+  app.delete("/api/groups/:id", async (request: AuthenticatedRequest, response: Response) => {
+    const groupId = request.params["id"];
+    if (typeof groupId !== "string" || !store.beginGroupOperation(groupId)) {
+      return response.status(409).json({ error: "conflict", message: "This group is already being changed" });
+    }
+    try {
+      const group = await groupClient.getGroup(groupId, request.bearerToken as string);
+      if (group.ownerId !== request.userId) {
+        return response.status(403).json({ error: "forbidden", message: "Only the group owner can delete this group" });
+      }
+      if (group.members.length !== 1 || group.members[0] !== group.ownerId) {
+        return response.status(409).json({ error: "conflict", message: "Groups with other members cannot be deleted" });
+      }
+      if (store.listByGroup(groupId).length > 0) {
+        return response.status(409).json({ error: "conflict", message: "Groups with membership request history cannot be deleted" });
+      }
+      await groupClient.deleteGroup(groupId);
+      return response.sendStatus(204);
     } catch (error) {
       return sendGroupError(response, error);
+    } finally {
+      store.endGroupOperation(groupId);
     }
   });
 

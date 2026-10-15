@@ -31,6 +31,7 @@ export class RequestStore {
   private requests = new Map<string, MembershipRequest>();
   private decisionLocks = new Set<string>();
   private notificationLocks = new Set<string>();
+  private groupOperationLocks = new Set<string>();
   private writeQueue: Promise<void> = Promise.resolve();
 
   private constructor(
@@ -74,6 +75,16 @@ export class RequestStore {
       .filter((request) => request.groupId === groupId)
       .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
       .map((request) => structuredClone(request));
+  }
+
+  beginGroupOperation(groupId: string): boolean {
+    if (this.groupOperationLocks.has(groupId)) return false;
+    this.groupOperationLocks.add(groupId);
+    return true;
+  }
+
+  endGroupOperation(groupId: string): void {
+    this.groupOperationLocks.delete(groupId);
   }
 
   async create(groupId: string, requesterId: string): Promise<MembershipRequest | undefined> {

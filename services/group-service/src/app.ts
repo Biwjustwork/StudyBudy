@@ -10,7 +10,7 @@ export function createApp(store: GroupStore, tokenSecret: string, serviceToken: 
   app.use(express.json({ limit: "32kb" }));
   app.use((request, response, next) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
-    response.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
+    response.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
     response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, x-service-token");
     if (request.method === "OPTIONS") return response.sendStatus(204);
     next();
@@ -40,6 +40,21 @@ export function createApp(store: GroupStore, tokenSecret: string, serviceToken: 
       return response.status(422).json({ error: "capacity_exceeded", message: result.error === "closed" ? "Group is closed for new members" : "Group is full" });
     }
     return response.json(result.value);
+  });
+
+  app.delete("/internal/groups/:id", async (request: Request, response: Response) => {
+    if (request.header("x-service-token") !== serviceToken) {
+      return response.status(401).json({ error: "unauthorized", message: "Service token is invalid" });
+    }
+    const id = request.params["id"];
+    const group = typeof id === "string" ? store.get(id) : undefined;
+    if (!group) return response.status(404).json({ error: "not_found", message: "Group not found" });
+    const result = await store.deleteIfOwnerAlone(group.id);
+    if (result === "not_found") return response.status(404).json({ error: "not_found", message: "Group not found" });
+    if (result === "not_empty") {
+      return response.status(409).json({ error: "conflict", message: "Groups with other members cannot be deleted" });
+    }
+    return response.sendStatus(204);
   });
 
   // ด่านตรวจ JWT: ทุก route /api/* ข้างล่างต้องผ่านตรงนี้ก่อน (ต้องมี userId ใน token)

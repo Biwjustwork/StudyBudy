@@ -35,6 +35,7 @@ class FakeGroupClient implements GroupClient {
   };
   addMemberError: GroupServiceError | undefined;
   addMemberCalls = 0;
+  deleteGroupCalls = 0;
 
   async getGroup(groupId: string): Promise<GroupSnapshot> {
     if (groupId !== this.group.id) throw new GroupServiceError(404, "Group not found");
@@ -49,6 +50,11 @@ class FakeGroupClient implements GroupClient {
     }
     if (this.group.members.includes(userId)) throw new GroupServiceError(409, "User is already a member");
     this.group.members.push(userId);
+  }
+
+  async deleteGroup(groupId: string): Promise<void> {
+    if (groupId !== this.group.id) throw new GroupServiceError(404, "Group not found");
+    this.deleteGroupCalls += 1;
   }
 }
 

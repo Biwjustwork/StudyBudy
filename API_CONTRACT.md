@@ -77,6 +77,10 @@ Request: `{ "id": "user-123", "name": "Aun", "email": "student@example.com" }`
 
 สำเร็จครั้งแรก `201`: `{ "id": "user-123", "name": "Aun", "email": "student@example.com", "subjects": [] }`. หากมี ID เดิมและ `name`/`email` ตรงกัน ให้คืน profile เดิมด้วย `200` เพื่อรองรับการ retry จาก Auth โดยไม่สร้างซ้ำ; ID เดิมแต่ข้อมูลต่างกันตอบ `409`; ไม่มีหรือ token ภายในไม่ถูกต้องตอบ `401`
 
+### `POST /internal/users/lookup` — สำหรับ Membership Service เท่านั้น
+
+ใช้ `X-Service-Token` ค่าเดียวกับ `PROFILE_SERVICE_TOKEN`; Request `{ "ids": ["user-123"] }`; `ids` เป็น array ของ string ไม่ว่างไม่เกิน 500 รายการ สำเร็จ `200` คืนเฉพาะ profile ที่พบในรูป `{ "id", "name", "email" }` โดยไม่คืน subjects; token หาย/ผิดตอบ `401`, body ไม่ถูกต้องตอบ `400`. Membership เรียกหลังยืนยันแล้วว่าผู้เรียกเป็นเจ้าของกลุ่ม เพื่อแสดงข้อมูลผู้ขอให้เจ้าของกลุ่มเท่านั้น
+
 ### `GET /api/users/:id`
 
 ต้องมี Bearer token และ `:id` ต้องตรงกับ `userId` ใน token; สำเร็จ `200`:
@@ -106,6 +110,7 @@ Group Service เก็บข้อมูลกลุ่มในไฟล์ JS
 - `GET /api/groups/:id`: คืนรายละเอียดกลุ่มและจำนวนสมาชิก; กลุ่มไม่มีตอบ `404`
 - `PATCH /api/groups/:id`: เจ้าของกลุ่มเท่านั้นแก้ข้อมูลกลุ่ม; ผู้ใช้อื่นตอบ `403`, กลุ่มไม่มีตอบ `404`
 - `POST /internal/groups/:id/members`: สำหรับ Membership Service เพิ่มสมาชิกแบบ atomic เมื่อกลุ่มยังไม่เต็ม; ตรวจ `X-Service-Token`; สำเร็จ `200` คืนจำนวนสมาชิกใหม่, กลุ่มเต็มตอบ `422`, เพิ่ม user ซ้ำตอบ `409`
+- `DELETE /internal/groups/:id`: สำหรับ Membership Service ลบกลุ่มผ่าน `X-Service-Token`; ลบได้เมื่อ owner เป็นสมาชิกเพียงคนเดียว สำเร็จ `204`; สมาชิกอื่นยังอยู่ตอบ `409`; group ไม่มีตอบ `404`; token หาย/ผิดตอบ `401`
 
 ข้อมูลสร้าง/แก้ไขต้องมี subject และ topic ที่ไม่ว่าง, startsAt เป็น ISO 8601 พร้อม timezone, maxMembers เป็นจำนวนเต็มบวก และ location ไม่เป็นค่าว่าง; ข้อมูลผิดตอบ `400`
 
@@ -116,7 +121,8 @@ Membership Service เก็บคำขอในไฟล์ JSON ของต�
 ตัวตนผู้ขอและผู้ตัดสินมาจาก JWT
 
 - `POST /api/requests`: body `{ "groupId": "group-123" }`; สร้างคำขอ `pending` โดยใช้ userId จาก token; สำเร็จ `201` คืน request; คำขอซ้ำตอบ `409`; กลุ่มไม่มีตอบ `404`; กลุ่มเต็มตอบ `422`
-- `GET /api/requests?groupId=group-123`: เจ้าของกลุ่มเท่านั้นดูรายการคำขอได้; สำเร็จ `200` คืน array
+- `GET /api/requests?groupId=group-123`: เจ้าของกลุ่มเท่านั้นดูรายการคำขอได้; สำเร็จ `200` คืน array โดยแต่ละรายการเพิ่ม `requesterName` และ `requesterEmail` จาก Profile Service
+- `DELETE /api/groups/:id`: เจ้าของกลุ่มเท่านั้นลบกลุ่มได้ผ่าน Membership Service; ต้องไม่มีสมาชิกอื่นนอกจากเจ้าของและไม่มีประวัติคำขอ; สำเร็จ `204`, เงื่อนไขไม่ครบตอบ `409`; Membership ประสาน Group Service ผ่าน `DELETE /internal/groups/:id` และ service token
 - `POST /api/requests/:id/approve`: เจ้าของกลุ่มอนุมัติ; ก่อนบันทึกสถานะต้องเรียก `POST /internal/groups/:id/members`; เพิ่มสมาชิกสำเร็จแล้วจึงเปลี่ยนสถานะเป็น `approved`; คำขอที่ตัดสินแล้วตอบ `409`
 - `POST /api/requests/:id/reject`: เจ้าของกลุ่มปฏิเสธ; สำเร็จคืน request สถานะ `rejected`; ผู้ไม่มีสิทธิ์ตอบ `403`; request/group ไม่มีตอบ `404`
 

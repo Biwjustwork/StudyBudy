@@ -28,6 +28,7 @@ All `/api` routes require `Authorization: Bearer <token>`. The owner is always t
 | GET | `/api/groups?subject=Calculus&openOnly=true` | List groups sorted by `startsAt` ascending; `subject` matches case-insensitively after trimming (omit/blank = all groups); `openOnly=true` keeps only `isOpen` groups with free seats |
 | GET | `/api/groups/:id` | Read one group; 404 if absent |
 | PATCH | `/api/groups/:id` | Owner-only partial update of `subject/topic/startsAt/location/maxMembers/isOpen`; 403 for non-owners |
+| DELETE | `/internal/groups/:id` | Membership Service only, via `x-service-token`; deletes a group only when the owner is its sole member; `204` on success and `409` if other members remain |
 | POST | `/internal/groups/:id/members` | Server-to-server seat reservation with header `x-service-token: $SERVICE_TOKEN` ONLY (no Bearer); see member-4 contract below |
 
 ```powershell

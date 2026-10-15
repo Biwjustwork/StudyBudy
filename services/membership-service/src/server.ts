@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { createApp } from "./app.js";
 import { HttpGroupClient } from "./group-client.js";
 import { HttpNotificationClient } from "./notification-client.js";
+import { HttpProfileClient } from "./profile-client.js";
 import { retryPendingNotifications } from "./notification-delivery.js";
 import { RequestStore } from "./request-store.js";
 
@@ -12,8 +13,9 @@ if (!tokenSecret || tokenSecret.length < 32) throw new Error("AUTH_TOKEN_SECRET 
 
 const groupClient = new HttpGroupClient(process.env.GROUP_URL ?? "", process.env.SERVICE_TOKEN ?? "");
 const notificationClient = new HttpNotificationClient(process.env.NOTIFY_URL ?? "", process.env.NOTIFY_SERVICE_TOKEN ?? "");
+const profileClient = new HttpProfileClient(process.env.PROFILE_URL ?? "", process.env.PROFILE_SERVICE_TOKEN ?? "");
 const store = await RequestStore.open(resolve(process.env.MEMBERSHIP_DATA_FILE ?? "./data/requests.json"));
-createApp(store, tokenSecret, groupClient, notificationClient).listen(port, () => {
+createApp(store, tokenSecret, groupClient, notificationClient, profileClient).listen(port, () => {
   console.log(`Membership service listening on port ${port}`);
 });
 
