@@ -187,6 +187,11 @@ const closeCreateGroupModalBtn = byId<HTMLButtonElement>('close-create-group-mod
 const cancelCreateGroupBtn = byId<HTMLButtonElement>('cancel-create-group-btn');
 const createGroupForm = byId<HTMLFormElement>('create-group-form');
 const groupStartsAtInput = byId<HTMLInputElement>('group-starts-at');
+const confirmModal = byId<HTMLElement>('confirm-modal');
+const confirmTitle = byId<HTMLElement>('confirm-title');
+const confirmMessage = byId<HTMLElement>('confirm-message');
+const confirmCancelBtn = byId<HTMLButtonElement>('confirm-cancel-btn');
+const confirmAcceptBtn = byId<HTMLButtonElement>('confirm-accept-btn');
 
 // Requests Elements
 const refreshRequestsBtn = byId<HTMLButtonElement>('refresh-requests-btn');
@@ -247,6 +252,37 @@ function showToast(message: string, isError = false) {
   setTimeout(() => {
     toastEl.classList.remove('visible');
   }, 3200);
+}
+
+function confirmInApp(title: string, message: string, confirmLabel: string): Promise<boolean> {
+  confirmTitle.textContent = title;
+  confirmMessage.textContent = message;
+  confirmAcceptBtn.textContent = confirmLabel;
+  confirmModal.classList.remove('hidden');
+
+  return new Promise((resolve) => {
+    const finish = (confirmed: boolean) => {
+      confirmModal.classList.add('hidden');
+      confirmAcceptBtn.removeEventListener('click', onConfirm);
+      confirmCancelBtn.removeEventListener('click', onCancel);
+      confirmModal.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKeyDown);
+      resolve(confirmed);
+    };
+    const onConfirm = () => finish(true);
+    const onCancel = () => finish(false);
+    const onBackdrop = (event: MouseEvent) => {
+      if (event.target === confirmModal) finish(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') finish(false);
+    };
+    confirmAcceptBtn.addEventListener('click', onConfirm);
+    confirmCancelBtn.addEventListener('click', onCancel);
+    confirmModal.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKeyDown);
+    confirmCancelBtn.focus();
+  });
 }
 
 function showMessage(element: HTMLElement, message: string, isError = false) {
@@ -478,7 +514,11 @@ function renderGroups(groups: Group[]) {
   groupsList.querySelectorAll<HTMLButtonElement>('[data-action="leave-group"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const groupId = btn.dataset.groupId;
-      if (!groupId || !window.confirm('ยืนยันออกจากกลุ่มนี้หรือไม่? คุณจะต้องส่งคำขอใหม่หากต้องการเข้าร่วมอีกครั้ง')) return;
+      if (!groupId || !(await confirmInApp(
+        'ออกจากกลุ่มนี้?',
+        'คุณจะไม่ได้เป็นสมาชิกของกลุ่มนี้อีก หากต้องการกลับเข้าร่วมภายหลังต้องส่งคำขอใหม่',
+        'ออกจากกลุ่ม',
+      ))) return;
       btn.disabled = true;
       try {
         await apiRequest<void>(memberUrl, `/api/groups/${encodeURIComponent(groupId)}/leave`, { method: 'DELETE' });
@@ -537,6 +577,10 @@ async function loadRequests() {
 
           const pendingCount = reqs.filter((r) => r.status === 'pending').length;
           totalPending += pendingCount;
+          const deleteBlockReasons = [
+            group.members.length !== 1 ? `ยังมีสมาชิกคนอื่นอยู่ ${group.members.length - 1} คน` : '',
+            pendingCount > 0 ? `ยังมีคำขอรออนุมัติ ${pendingCount} รายการ` : '',
+          ].filter(Boolean);
 
           let reqRows = '';
           if (reqs.length === 0) {
@@ -587,10 +631,10 @@ async function loadRequests() {
                 </div>
                 <div class="owner-group-actions">
                   ${group.isOpen ? '<span class="status-badge open">เปิดรับ</span>' : '<span class="status-badge closed">ปิดรับ</span>'}
-                  <button class="button button-danger button-sm" data-action="delete-group" data-group-id="${escapeHtml(group.id)}" ${group.members.length !== 1 || reqs.some((item) => item.status === 'pending') ? 'disabled title="ลบได้เมื่อเหลือเฉพาะเจ้าของและไม่มีคำขอที่รออนุมัติ"' : ''}>ลบกลุ่ม</button>
+                  <button class="button button-danger button-sm" data-action="delete-group" data-group-id="${escapeHtml(group.id)}" ${deleteBlockReasons.length > 0 ? 'disabled' : ''}>ลบกลุ่ม</button>
                 </div>
               </div>
-              ${group.members.length !== 1 || reqs.some((item) => item.status === 'pending') ? '<small class="delete-group-hint">ลบได้เมื่อเหลือเฉพาะเจ้าของและไม่มีคำขอที่รออนุมัติ</small>' : ''}
+              ${deleteBlockReasons.length > 0 ? `<small class="delete-group-hint">ยังลบไม่ได้: ${deleteBlockReasons.map(escapeHtml).join(' · ')} ต้องให้สมาชิกออกจากกลุ่มและจัดการคำขอที่ค้างก่อน</small>` : ''}
               <div class="requests-table">
                 ${reqRows}
               </div>
@@ -636,7 +680,11 @@ async function loadRequests() {
       btn.addEventListener('click', async () => {
         const groupId = btn.dataset.groupId;
         if (!groupId || btn.disabled) return;
-        if (!window.confirm('ยืนยันลบกลุ่มนี้หรือไม่? การลบไม่สามารถย้อนกลับได้ และสมาชิกจะไม่สามารถเข้าถึงกลุ่มนี้อีก')) return;
+        if (!(await confirmInApp(
+          'ลบกลุ่มนี้?',
+          'การลบไม่สามารถย้อนกลับได้ และสมาชิกจะไม่สามารถเข้าถึงกลุ่มนี้อีก',
+          'ลบกลุ่ม',
+        ))) return;
         btn.disabled = true;
         try {
           await apiRequest<void>(memberUrl, `/api/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });

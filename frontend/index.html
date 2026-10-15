@@ -363,6 +363,21 @@
       </div>
     </div>
 
+    <!-- Branded confirmation dialog for destructive/member actions -->
+    <div id="confirm-modal" class="modal-overlay hidden" role="alertdialog" aria-modal="true"
+      aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <section class="modal-card confirm-card">
+        <div class="confirm-mark" aria-hidden="true">?</div>
+        <span class="mini-label">PLEASE CONFIRM</span>
+        <h3 id="confirm-title">ยืนยันการทำรายการ</h3>
+        <p id="confirm-message"></p>
+        <div class="modal-footer">
+          <button id="confirm-cancel-btn" class="button button-quiet" type="button">ยกเลิก</button>
+          <button id="confirm-accept-btn" class="button button-danger" type="button">ยืนยัน</button>
+        </div>
+      </section>
+    </div>
+
     <!-- Toast Feedback -->
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </main>

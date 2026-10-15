@@ -1324,3 +1324,9 @@ body{background:#f5faff}.app-shell{color:#173b60}.brand-mark{background:#1769aa;
 .requester-email{color:#54738b;font-size:12px;overflow-wrap:anywhere}
 .request-date{color:#8194a3}
 .member-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.confirm-card{max-width:440px;text-align:center;padding:34px 34px 22px;border-top:4px solid #4b9bd2}
+.confirm-mark{width:54px;height:54px;margin:0 auto 16px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(145deg,#e7f5ff,#cdeaff);color:#247db8;font-size:27px;font-weight:700}
+.confirm-card h3{margin:8px 0;font-size:23px;color:#173b60}
+.confirm-card p{margin:0;color:#627b90;line-height:1.75;font-size:14px}
+.confirm-card .modal-footer{justify-content:center;margin-top:24px}
+.delete-group-hint{line-height:1.7}
