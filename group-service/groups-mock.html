@@ -61,15 +61,15 @@
     const dayMs = 86400000;
     const isoDay = (offset) => new Date(Date.now() + offset * dayMs).toISOString();
     const mockGroups = [
-      { id: 'mock-open', subject: 'Calculus', topic: 'Limits', datetime: isoDay(1), maxMembers: 5, location: 'Library 3F', ownerId: 'u1', members: ['u1'], isOpen: true },
-      { id: 'mock-full', subject: 'Calculus', topic: 'Derivatives', datetime: isoDay(2), maxMembers: 2, location: 'Library 4F', ownerId: 'u2', members: ['u2', 'u3'], isOpen: true },
-      { id: 'mock-closed', subject: 'Calculus', topic: 'Integrals', datetime: isoDay(3), maxMembers: 5, location: 'Room B', ownerId: 'u4', members: ['u4'], isOpen: false }
+      { id: 'mock-open', subject: 'Calculus', topic: 'Limits', startsAt: isoDay(1), maxMembers: 5, location: 'Library 3F', ownerId: 'u1', members: ['u1'], isOpen: true },
+      { id: 'mock-full', subject: 'Calculus', topic: 'Derivatives', startsAt: isoDay(2), maxMembers: 2, location: 'Library 4F', ownerId: 'u2', members: ['u2', 'u3'], isOpen: true },
+      { id: 'mock-closed', subject: 'Calculus', topic: 'Integrals', startsAt: isoDay(3), maxMembers: 5, location: 'Room B', ownerId: 'u4', members: ['u4'], isOpen: false }
     ];
 
     // Same logic as GET /api/groups in group-service/src/app.ts:
     // subject: trim + toLocaleLowerCase exact match (empty = all),
     // openOnly=true: keep isOpen && members.length < maxMembers,
-    // sort by datetime ascending.
+    // sort by startsAt ascending.
     function filterGroups(all, subjectQuery, onlyOpen) {
       const q = subjectQuery.trim().toLocaleLowerCase();
       let items = all.slice();
@@ -79,12 +79,12 @@
       if (onlyOpen) {
         items = items.filter((g) => g.isOpen && g.members.length < g.maxMembers);
       }
-      items.sort((a, b) => Date.parse(a.datetime) - Date.parse(b.datetime));
+      items.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
       return items;
     }
 
     function toPostPayload(g) {
-      return { subject: g.subject, topic: g.topic, datetime: g.datetime, maxMembers: g.maxMembers, location: g.location, isOpen: g.isOpen };
+      return { subject: g.subject, topic: g.topic, startsAt: g.startsAt, maxMembers: g.maxMembers, location: g.location, isOpen: g.isOpen };
     }
 
     const headers = () => ({ Authorization: `Bearer ${token.value.trim()}`, 'Content-Type': 'application/json' });

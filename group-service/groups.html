@@ -40,8 +40,8 @@
     <input id="subject" placeholder="Calculus">
     <label for="topic">Topic (หัวข้อ)</label>
     <input id="topic" placeholder="Limits">
-    <label for="datetime">Datetime (เวลา, ต้องเป็นอนาคต)</label>
-    <input id="datetime" type="datetime-local">
+    <label for="startsAt">StartsAt (เวลา, ต้องเป็นอนาคต)</label>
+    <input id="startsAt" type="datetime-local">
     <label for="maxMembers">Max members (จำนวนสูงสุด)</label>
     <input id="maxMembers" type="number" min="1" step="1" value="5">
     <label for="location">Location (สถานที่)</label>
@@ -78,7 +78,7 @@
     const token = document.querySelector('#token');
     const subject = document.querySelector('#subject');
     const topic = document.querySelector('#topic');
-    const datetime = document.querySelector('#datetime');
+    const startsAt = document.querySelector('#startsAt');
     const maxMembers = document.querySelector('#maxMembers');
     const location = document.querySelector('#location');
     const isOpen = document.querySelector('#isOpen');
@@ -128,7 +128,7 @@
 
     async function showDetail(id) {
       const g = await request(`/api/groups/${encodeURIComponent(id.trim())}`);
-      status.textContent = `${g.subject} • ${g.topic} • ${g.datetime} • seats ${g.members.length}/${g.maxMembers} • ${groupStatus(g)} • ${g.location}`;
+      status.textContent = `${g.subject} • ${g.topic} • ${g.startsAt} • seats ${g.members.length}/${g.maxMembers} • ${groupStatus(g)} • ${g.location}`;
     }
 
     document.querySelector('#create').addEventListener('click', async () => {
@@ -136,7 +136,7 @@
         const body = {
           subject: subject.value.trim(),
           topic: topic.value.trim(),
-          datetime: datetime.value ? new Date(datetime.value).toISOString() : '',
+          startsAt: startsAt.value ? new Date(startsAt.value).toISOString() : '',
           maxMembers: Number(maxMembers.value),
           location: location.value.trim(),
           isOpen: isOpen.checked
