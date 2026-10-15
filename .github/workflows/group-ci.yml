@@ -1,0 +1,27 @@
+name: group-ci
+on:
+  push:
+    paths: [group-service/**, .github/workflows/group-ci.yml]
+  pull_request:
+    paths: [group-service/**, .github/workflows/group-ci.yml]
+concurrency:
+  group: group-ci-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    working-directory: group-service
+jobs:
+  group-ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: group-service/package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - uses: docker/setup-buildx-action@v3
+      - run: docker build -f Dockerfile -t study-buddy-group:ci .

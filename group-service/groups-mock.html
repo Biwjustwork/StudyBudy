@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Study Buddy — กลุ่มจำลอง (Mock)</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #192b25; background: #f3f7f3; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    main { width: min(100%, 560px); background: white; border: 1px solid #dce7df; border-radius: 20px; padding: 28px; box-shadow: 0 16px 48px #17392312; }
+    h1 { margin-top: 0; font-size: 1.6rem; }
+    p { color: #52655a; line-height: 1.6; }
+    .banner { background: #fff4d6; border: 1px solid #e3c86a; border-radius: 10px; padding: 10px 12px; font-weight: 700; }
+    label { display: block; margin: 16px 0 6px; font-weight: 650; }
+    input, textarea, button { box-sizing: border-box; width: 100%; padding: 11px 12px; border: 1px solid #cbd9ce; border-radius: 10px; font: inherit; }
+    textarea { min-height: 110px; resize: vertical; }
+    input[type="checkbox"] { width: auto; }
+    .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-weight: 650; }
+    button { margin-top: 16px; background: #176b46; color: white; border: 0; font-weight: 700; cursor: pointer; }
+    button.secondary { background: #e8f1eb; color: #176b46; }
+    ul { list-style: none; padding: 0; margin: 12px 0 0; }
+    li { border: 1px solid #dce7df; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+    #status { min-height: 1.5em; margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>กลุ่มจำลอง (Mock)</h1>
+    <p class="banner">MOCK — ไม่เขียน backend จริง (กลุ่มจำลองอยู่ในหน้านี้เท่านั้น)</p>
+    <p>ตั้งวิชา → ดูคนสนใจวิชาเดียวกันจาก Profile API จริง → ลองค้นหากลุ่มจำลอง → copy seed JSON ไป POST กับ Real API</p>
+
+    <label for="api">Profile API URL</label>
+    <input id="api" value="http://localhost:3002" autocomplete="url">
+    <label for="token">Access token</label>
+    <input id="token" type="password" autocomplete="off" placeholder="Bearer token จาก Auth Service">
+    <label for="subject">Subject (วิชา)</label>
+    <input id="subject" placeholder="Calculus" value="Calculus">
+    <label class="check" for="openOnly"><input id="openOnly" type="checkbox" checked> เฉพาะกลุ่มที่เปิดรับ (openOnly)</label>
+
+    <button id="fetch" type="button">ดึงคนสนใจ + จำลองกลุ่ม</button>
+    <button class="secondary" id="copy" type="button">Copy seed JSON (พร้อม POST)</button>
+
+    <h2>คนสนใจวิชานี้ (Profile API จริง)</h2>
+    <ul id="people"></ul>
+    <h2>กลุ่มจำลอง</h2>
+    <ul id="groups"></ul>
+    <label for="seed">Seed JSON (strip แล้ว พร้อม POST /api/groups)</label>
+    <textarea id="seed" readonly></textarea>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+  <script>
+    const api = document.querySelector('#api');
+    const token = document.querySelector('#token');
+    const subject = document.querySelector('#subject');
+    const openOnly = document.querySelector('#openOnly');
+    const people = document.querySelector('#people');
+    const groups = document.querySelector('#groups');
+    const seed = document.querySelector('#seed');
+    const status = document.querySelector('#status');
+
+    const dayMs = 86400000;
+    const isoDay = (offset) => new Date(Date.now() + offset * dayMs).toISOString();
+    const mockGroups = [
+      { id: 'mock-open', subject: 'Calculus', topic: 'Limits', startsAt: isoDay(1), maxMembers: 5, location: 'Library 3F', ownerId: 'u1', members: ['u1'], isOpen: true },
+      { id: 'mock-full', subject: 'Calculus', topic: 'Derivatives', startsAt: isoDay(2), maxMembers: 2, location: 'Library 4F', ownerId: 'u2', members: ['u2', 'u3'], isOpen: true },
+      { id: 'mock-closed', subject: 'Calculus', topic: 'Integrals', startsAt: isoDay(3), maxMembers: 5, location: 'Room B', ownerId: 'u4', members: ['u4'], isOpen: false }
+    ];
+
+    // Same logic as GET /api/groups in group-service/src/app.ts:
+    // subject: trim + toLocaleLowerCase exact match (empty = all),
+    // openOnly=true: keep isOpen && members.length < maxMembers,
+    // sort by startsAt ascending.
+    function filterGroups(all, subjectQuery, onlyOpen) {
+      const q = subjectQuery.trim().toLocaleLowerCase();
+      let items = all.slice();
+      if (q.length > 0) {
+        items = items.filter((g) => g.subject.trim().toLocaleLowerCase() === q);
+      }
+      if (onlyOpen) {
+        items = items.filter((g) => g.isOpen && g.members.length < g.maxMembers);
+      }
+      items.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+      return items;
+    }
+
+    function toPostPayload(g) {
+      return { subject: g.subject, topic: g.topic, startsAt: g.startsAt, maxMembers: g.maxMembers, location: g.location, isOpen: g.isOpen };
+    }
+
+    const headers = () => ({ Authorization: `Bearer ${token.value.trim()}`, 'Content-Type': 'application/json' });
+
+    document.querySelector('#fetch').addEventListener('click', async () => {
+      people.innerHTML = '';
+      groups.innerHTML = '';
+      try {
+        const response = await fetch(
+          `${api.value.replace(/\/$/, '')}/api/users/search?subject=${encodeURIComponent(subject.value.trim())}`,
+          { headers: headers() }
+        );
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.message || `Request failed (${response.status})`);
+        for (const p of body) {
+          const li = document.createElement('li');
+          li.textContent = `${p.name} (${(p.subjects || []).join(', ')})`;
+          people.appendChild(li);
+        }
+        const items = filterGroups(mockGroups, subject.value, openOnly.checked);
+        for (const g of items) {
+          const li = document.createElement('li');
+          const state = !g.isOpen ? 'ปิดรับ' : g.members.length >= g.maxMembers ? 'เต็ม' : 'เปิดรับ';
+          li.textContent = `${g.subject} • ${g.topic} • seats ${g.members.length}/${g.maxMembers} • ${state}`;
+          groups.appendChild(li);
+        }
+        seed.value = JSON.stringify(items.map(toPostPayload), null, 2);
+        status.textContent = items.length ? `พบ ${items.length} กลุ่มจำลอง + ${body.length} คนที่สนใจ` : 'ไม่พบกลุ่มจำลอง';
+      } catch (error) { status.textContent = error.message; }
+    });
+
+    document.querySelector('#copy').addEventListener('click', async () => {
+      try {
+        const items = filterGroups(mockGroups, subject.value, openOnly.checked);
+        seed.value = JSON.stringify(items.map(toPostPayload), null, 2);
+        await navigator.clipboard.writeText(seed.value);
+        status.textContent = `copy seed แล้ว ${items.length} กลุ่ม — เอาไป POST ต่อ Group API ได้เลย`;
+      } catch (error) { status.textContent = error.message; }
+    });
+  </script>
+</body>
+</html>
