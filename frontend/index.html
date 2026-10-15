@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f7f2" />
+    <meta name="description" content="หาเพื่อนอ่านหนังสือวิชาเดียวกันกับ Study Buddy" />
+    <title>Study Buddy — อ่านด้วยกัน</title>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <main id="app" class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Study Buddy หน้าหลัก">
+          <span class="brand-mark" aria-hidden="true">sb</span>
+          <span>study buddy<span class="brand-period">.</span></span>
+        </a>
+        <div class="topbar-right">
+          <span class="online-dot"></span>
+          <span class="topbar-note">พื้นที่เล็ก ๆ สำหรับการเรียนรู้ร่วมกัน</span>
+          <button id="logout-button" class="button button-quiet hidden" type="button">ออกจากระบบ</button>
+        </div>
+      </header>
+
+      <section id="auth-view" class="auth-layout">
+        <div class="intro-panel">
+          <div class="eyebrow"><span class="eyebrow-line"></span> STUDY BETTER, TOGETHER</div>
+          <h1>วิชานี้ยากขึ้น<br />ถ้าอ่าน<span class="highlight">คนเดียว</span></h1>
+          <p class="intro-copy">บอกเราว่าคุณกำลังเรียนอะไร แล้วเริ่มหาเพื่อนที่อยากเข้าใจไปด้วยกัน</p>
+          <div class="note-card">
+            <span class="note-icon" aria-hidden="true">✳</span>
+            <div><strong>เริ่มจากวิชาที่สนใจ</strong><span>ตั้งโปรไฟล์ของคุณ แล้วค้นหาเพื่อนร่วมคลาส</span></div>
+          </div>
+          <div class="decor-stamp" aria-hidden="true"><span>learn</span><span>together</span><span>✷</span></div>
+        </div>
+
+        <section class="auth-card" aria-labelledby="auth-title">
+          <div class="auth-card-top"><span class="mini-label">WELCOME TO YOUR STUDY CORNER</span><span class="card-spark" aria-hidden="true">✦</span></div>
+          <h2 id="auth-title">กลับมาแล้ว ยินดีต้อนรับ</h2>
+          <p class="muted">เข้าสู่ระบบเพื่อดูและจัดการวิชาที่สนใจ</p>
+          <div class="auth-tabs" role="tablist" aria-label="เลือกการเข้าใช้งาน">
+            <button id="login-tab" class="auth-tab active" type="button" role="tab" aria-selected="true">เข้าสู่ระบบ</button>
+            <button id="register-tab" class="auth-tab" type="button" role="tab" aria-selected="false">สร้างบัญชี</button>
+          </div>
+          <form id="login-form" class="form-stack">
+            <label for="login-username">ชื่อผู้ใช้หรืออีเมล</label>
+            <input id="login-username" name="username" autocomplete="username" placeholder="เช่น kit.study" required />
+            <label for="login-password">รหัสผ่าน</label>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="กรอกรหัสผ่าน" required />
+            <button class="button button-primary submit-button" type="submit">เข้าสู่ระบบ <span aria-hidden="true">↗</span></button>
+          </form>
+          <form id="register-form" class="form-stack hidden">
+            <label for="register-name">ชื่อที่ใช้แสดง</label>
+            <input id="register-name" name="name" autocomplete="name" placeholder="ชื่อของคุณ" required />
+            <label for="register-email">อีเมล</label>
+            <input id="register-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+            <label for="register-password">รหัสผ่าน</label>
+            <input id="register-password" name="password" type="password" autocomplete="new-password" placeholder="ตั้งรหัสผ่าน" required />
+            <button class="button button-primary submit-button" type="submit">สร้างบัญชี <span aria-hidden="true">↗</span></button>
+          </form>
+          <p id="auth-message" class="message" role="status" aria-live="polite"></p>
+          <p class="privacy-note"><span aria-hidden="true">⌑</span> เซสชันนี้จะอยู่ในแท็บปัจจุบันเท่านั้น</p>
+        </section>
+      </section>
+
+      <section id="profile-view" class="workspace hidden" aria-labelledby="workspace-title">
+        <div class="workspace-heading">
+          <div><div class="eyebrow"><span class="eyebrow-line"></span> YOUR STUDY SPACE</div><h1 id="workspace-title">วิชาโปรดของคุณ<span class="highlight">.</span></h1></div>
+          <div class="welcome-chip"><span id="avatar-initial" class="avatar">ก</span><span>สวัสดี, <strong id="welcome-name">นักเรียน</strong></span></div>
+        </div>
+        <div class="workspace-grid">
+          <section class="panel profile-panel" aria-labelledby="profile-title">
+            <div class="panel-heading"><div><span class="panel-kicker">MY PROFILE</span><h2 id="profile-title">พื้นที่เรียนรู้ของฉัน</h2></div><span class="panel-icon" aria-hidden="true">✎</span></div>
+            <p class="muted">เลือกวิชาที่กำลังเรียน ระบบจะช่วยให้คุณค้นหาเพื่อนที่สนใจวิชาเดียวกัน</p>
+            <div class="profile-details"><div><span>ชื่อ</span><strong id="profile-name">—</strong></div><div><span>อีเมล</span><strong id="profile-email">—</strong></div></div>
+            <form id="subjects-form" class="form-stack">
+              <label for="subjects-input">วิชาที่สนใจ <span class="label-hint">หนึ่งวิชาต่อหนึ่งบรรทัด</span></label>
+              <textarea id="subjects-input" rows="5" placeholder="แคลคูลัส&#10;ชีววิทยา&#10;การเขียนโปรแกรม"></textarea>
+              <button class="button button-primary" type="submit">บันทึกรายวิชา <span aria-hidden="true">↗</span></button>
+            </form>
+            <p id="profile-message" class="message" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="panel search-panel" aria-labelledby="search-title">
+            <div class="panel-heading"><div><span class="panel-kicker">FIND YOUR PEOPLE</span><h2 id="search-title">หาเพื่อนร่วมวิชา</h2></div><span class="panel-icon panel-icon-green" aria-hidden="true">⌕</span></div>
+            <p class="muted">ค้นหาคนที่สนใจวิชาเดียวกับคุณ</p>
+            <form id="search-form" class="search-form"><label class="sr-only" for="search-subject">ชื่อวิชา</label><input id="search-subject" placeholder="ลองค้นหา เช่น แคลคูลัส" required /><button class="button button-dark" type="submit">ค้นหา</button></form>
+            <div id="search-results" class="results" aria-live="polite"><div class="empty-state"><span aria-hidden="true">✳</span><p>เพื่อนร่วมอ่านอาจอยู่ใกล้กว่าที่คิด</p><small>ลองค้นหาวิชาที่คุณกำลังเรียน</small></div></div>
+          </section>
+        </div>
+        <footer class="workspace-footer"><span>หนึ่งหน้า หนึ่งวิชา อีกหนึ่งเพื่อนร่วมทาง</span><span>STUDY BUDDY <b>✳</b></span></footer>
+      </section>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

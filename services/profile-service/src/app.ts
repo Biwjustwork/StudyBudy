@@ -4,7 +4,7 @@ import type { ProfileStore } from "./profile-store.js";
 
 type AuthenticatedRequest = Request & { userId?: string };
 
-export function createApp(store: ProfileStore, tokenSecret: string) {
+export function createApp(store: ProfileStore, tokenSecret: string, profileServiceToken: string) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "32kb" }));
@@ -18,7 +18,22 @@ export function createApp(store: ProfileStore, tokenSecret: string) {
 
   app.get("/health", (_request, response) => response.json({ status: "ok", service: "profile" }));
 
-  app.use((request: AuthenticatedRequest, response: Response, next: NextFunction) => {
+  app.post("/internal/users", async (request, response) => {
+    if (request.header("x-service-token") !== profileServiceToken) {
+      return response.status(401).json({ error: "unauthorized", message: "Service token is missing or invalid" });
+    }
+    const { id, name, email } = request.body ?? {};
+    if ([id, name, email].some((value) => typeof value !== "string" || value.trim().length === 0)) {
+      return response.status(400).json({ error: "validation_error", message: "id, name, and email must be non-empty strings" });
+    }
+    const result = await store.createFromAuth({ id: id.trim(), name: name.trim(), email: email.trim() });
+    if (result.status === "conflict") {
+      return response.status(409).json({ error: "conflict", message: "Profile already exists with different name or email" });
+    }
+    return response.status(result.status === "created" ? 201 : 200).json(result.profile);
+  });
+
+  app.use("/api", (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
     const authorization = request.header("authorization");
     const match = authorization?.match(/^Bearer\s+(.+)$/i);
     if (!match) return response.status(401).json({ error: "unauthorized", message: "Bearer token is required" });
