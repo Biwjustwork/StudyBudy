@@ -265,11 +265,15 @@
               </div>
 
               <div class="subjects-section">
-              <div class="subjects-section-heading"><span class="panel-kicker">MY SUBJECTS</span><h4>วิชาที่ฉันสนใจ</h4><p class="muted">เพิ่มวิชาที่กำลังเรียน วิชาละหนึ่งบรรทัด เพื่อนจะค้นหาคุณเจอ</p></div>
+              <div class="subjects-section-heading"><span class="panel-kicker">MY SUBJECTS</span><h4>วิชาที่ฉันสนใจ</h4><p class="muted">เพิ่มวิชาที่กำลังเรียนเป็นรายการ เพื่อนจะค้นหาคุณเจอ</p></div>
               <form id="subjects-form" class="form-stack">
                 <label for="subjects-input">รายชื่อวิชา</label>
-                <textarea id="subjects-input" rows="5"
-                  placeholder="แคลคูลัส&#10;ชีววิทยา&#10;การเขียนโปรแกรม"></textarea>
+                <div id="subjects-picker" class="subjects-picker" role="group" aria-label="รายชื่อวิชาที่สนใจ">
+                  <div id="subjects-chips" class="subjects-chips"></div>
+                  <input id="subjects-input" class="subjects-entry" type="text" autocomplete="off"
+                    placeholder="พิมพ์ชื่อวิชาแล้วกด Enter..." aria-label="พิมพ์ชื่อวิชาที่สนใจ" />
+                </div>
+                <small class="subjects-entry-hint">กด Enter เพื่อเพิ่มวิชา และกด × บนชิปเพื่อลบ</small>
                 <button class="button button-primary" type="submit">บันทึกรายวิชา <span
                     aria-hidden="true">↗</span></button>
               </form>

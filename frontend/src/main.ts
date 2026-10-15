@@ -207,7 +207,9 @@ const profileName = byId<HTMLElement>('profile-name');
 const profileEmail = byId<HTMLElement>('profile-email');
 const profileUserId = byId<HTMLElement>('profile-user-id');
 const subjectsForm = byId<HTMLFormElement>('subjects-form');
-const subjectsInput = byId<HTMLTextAreaElement>('subjects-input');
+const subjectsInput = byId<HTMLInputElement>('subjects-input');
+const subjectsChips = byId<HTMLElement>('subjects-chips');
+let subjectTags: string[] = [];
 const profileMessage = byId<HTMLElement>('profile-message');
 const classmatesSearchForm = byId<HTMLFormElement>('classmates-search-form');
 const classmatesSubjectInput = byId<HTMLInputElement>('classmates-subject-input');
@@ -286,6 +288,27 @@ function confirmInApp(title: string, message: string, confirmLabel: string): Pro
     document.addEventListener('keydown', onKeyDown);
     confirmCancelBtn.focus();
   });
+}
+
+function renderSubjectTags() {
+  subjectsChips.innerHTML = subjectTags.map((subject, index) => `
+    <span class="subject-chip">
+      <span>${escapeHtml(subject)}</span>
+      <button type="button" data-remove-subject="${index}" aria-label="ลบวิชา ${escapeAttribute(subject)}">×</button>
+    </span>
+  `).join('');
+}
+
+function addSubjectTag(raw: string) {
+  const subject = raw.trim();
+  if (!subject) return;
+  const exists = subjectTags.some((item) => item.localeCompare(subject, 'th', { sensitivity: 'base' }) === 0);
+  if (exists) {
+    showToast('มีวิชานี้ในรายการแล้ว', true);
+    return;
+  }
+  subjectTags = [...subjectTags, subject];
+  renderSubjectTags();
 }
 
 function showMessage(element: HTMLElement, message: string, isError = false) {
@@ -858,7 +881,8 @@ async function loadProfile() {
     welcomeName.textContent = profile.name || 'นักเรียน';
     avatarInitial.textContent = (profile.name || 'ส').charAt(0).toUpperCase();
 
-    subjectsInput.value = (profile.subjects || []).join('\n');
+    subjectTags = [...(profile.subjects || [])];
+    renderSubjectTags();
   } catch (error) {
     showMessage(profileMessage, (error as Error).message, true);
   }
@@ -1090,15 +1114,34 @@ function setupEventListeners() {
   });
 
   // Subjects Save
+  subjectsInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      addSubjectTag(subjectsInput.value);
+      subjectsInput.value = '';
+    } else if (event.key === 'Backspace' && subjectsInput.value.length === 0 && subjectTags.length > 0) {
+      subjectTags = subjectTags.slice(0, -1);
+      renderSubjectTags();
+    }
+  });
+  subjectsChips.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-remove-subject]');
+    if (!button) return;
+    const index = Number(button.dataset.removeSubject);
+    if (!Number.isInteger(index) || index < 0 || index >= subjectTags.length) return;
+    subjectTags = subjectTags.filter((_, itemIndex) => itemIndex !== index);
+    renderSubjectTags();
+    subjectsInput.focus();
+  });
+
   subjectsForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const userId = currentUserId();
     if (!userId) return;
 
-    const subjects = subjectsInput.value
-      .split('\n')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    if (subjectsInput.value.trim()) addSubjectTag(subjectsInput.value);
+    subjectsInput.value = '';
+    const subjects = [...subjectTags];
 
     showMessage(profileMessage, 'กำลังบันทึกรายวิชา...');
     try {

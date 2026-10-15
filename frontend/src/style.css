@@ -1295,7 +1295,7 @@ body{background:#f5faff}.app-shell{color:#173b60}.brand-mark{background:#1769aa;
 .subjects-section-heading h4{font-size:17px;font-weight:600;margin:4px 0}
 .subjects-section-heading p{font-size:11px;margin:0 0 14px}
 #content-profile .form-stack{gap:8px}
-#content-profile #subjects-input{min-height:118px;background:#fbfdff}
+#content-profile .subjects-picker{min-height:62px;background:#fbfdff}
 #content-profile .search-form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;margin:20px 0 14px}
 #content-profile .search-form input{min-width:0}
 #content-profile .results{flex:1;min-height:180px;margin:0;padding:8px 0;display:flex;flex-direction:column}
@@ -1341,3 +1341,12 @@ body{background:#f5faff}.app-shell{color:#173b60}.brand-mark{background:#1769aa;
 .group-capacity-track span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#8bc9eb,#328ac5);transition:width .3s ease}
 .group-card-footer{justify-content:flex-end}
 @media(max-width:760px){.group-card{grid-template-columns:52px minmax(0,1fr)}.group-capacity{padding-top:16px}.group-capacity-copy{gap:7px}}
+.subjects-picker{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-height:64px;padding:10px 12px;border:1px solid #c9dff0;border-radius:14px;background:#fbfdff;transition:border-color .18s,box-shadow .18s}
+.subjects-picker:focus-within{border-color:#5ca1ce;box-shadow:0 0 0 3px #438fca1d}
+.subjects-chips{display:contents}
+.subject-chip{display:inline-flex;align-items:center;gap:10px;padding:6px 10px 6px 14px;border:1px solid #bed9eb;border-radius:999px;background:#fff;color:#244d6b;font-size:13px;line-height:1.4;white-space:nowrap}
+.subject-chip button{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:50%;background:#edf7fd;color:#4c7895;font:inherit;font-size:18px;line-height:1;cursor:pointer;transition:background .15s,color .15s}
+.subject-chip button:hover{background:#dceffc;color:#145e90}
+#content-profile .subjects-entry{flex:1 1 180px;width:auto!important;min-width:155px!important;height:40px;min-height:0!important;padding:8px 10px!important;border:0!important;outline:0;background:transparent!important;box-shadow:none!important;font:inherit;font-size:13px}
+.subjects-entry-hint{padding-left:3px;color:#7890a1;font-size:11px}
+@media(max-width:420px){.subjects-picker{padding:9px;gap:6px}.subject-chip{font-size:12px}.subject-chip button{width:20px;height:20px}#content-profile .subjects-entry{min-width:130px!important}}
