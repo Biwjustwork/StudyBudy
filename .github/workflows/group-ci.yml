@@ -1,15 +1,15 @@
 name: group-ci
 on:
   push:
-    paths: [group-service/**, .github/workflows/group-ci.yml]
+    paths: [services/group-service/**, .github/workflows/group-ci.yml]
   pull_request:
-    paths: [group-service/**, .github/workflows/group-ci.yml]
+    paths: [services/group-service/**, .github/workflows/group-ci.yml]
 concurrency:
   group: group-ci-${{ github.ref }}
   cancel-in-progress: true
 defaults:
   run:
-    working-directory: group-service
+    working-directory: services/group-service
 jobs:
   group-ci:
     runs-on: ubuntu-latest
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm, cache-dependency-path: group-service/package-lock.json }
+        with: { node-version: 22, cache: npm, cache-dependency-path: services/group-service/package-lock.json }
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build

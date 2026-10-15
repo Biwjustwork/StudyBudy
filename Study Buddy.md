@@ -55,19 +55,21 @@ Pipeline ที่เสนอ: Pull Request → type check/build/unit test → 
 
 ## **หลักการทำงานร่วมกัน**
 
-* สมาชิกแต่ละคนเป็นเจ้าของ service และ repository ของตน รับผิดชอบ API, database, หน้าเว็บที่เกี่ยวข้อง, unit tests, Dockerfile และ README ขั้นพื้นฐาน ส่วน PM ดูแลภาพรวมและแม่แบบ pipeline ขณะที่ Tester ช่วยวางและรวมการทดสอบ ผู้พัฒนาทุกคนยังต้องเขียนและดูแล test ของ service ตนเอง  
+* ใช้ repository กลางเพียงแห่งเดียว และแยก service เป็นโฟลเดอร์ภายใน repository สมาชิกแต่ละคนเป็นเจ้าของงานของ service ที่รับผิดชอบ รวมถึง API, ไฟล์ JSON สำหรับข้อมูลของ service ตนเอง, หน้าเว็บที่เกี่ยวข้อง, unit tests, Dockerfile และ README ขั้นพื้นฐาน ส่วน PM ดูแลภาพรวมและ GitHub Actions workflow กลาง ขณะที่ Tester ช่วยวางและรวมการทดสอบ ผู้พัฒนาทุกคนยังต้องเขียนและดูแล test ของ service ตนเอง
 * ก่อนเริ่มเขียน feature ให้ทุกคนอ่าน API\_CONTRACT.md และตกลงชื่อ field, รูปแบบ error, port, environment variables, วิธีส่ง token และผู้มีสิทธิ์ทำรายการให้ตรงกัน หากต้องปรับสัญญา ให้เปิด PR แก้เอกสารก่อนหรือพร้อมกับโค้ดที่เปลี่ยน ห้ามเปลี่ยน API เงียบ ๆ
+* แนวทางเก็บข้อมูลของโครงงานนี้คือ JSON file แยกต่อ service: Auth เก็บบัญชีและ password hash, Profile เก็บข้อมูล profile/วิชา, Group เก็บกลุ่ม, Membership เก็บคำขอ และ Notification เก็บการแจ้งเตือน แต่ละ service ต้องอ่าน/เขียนข้อมูลของตนผ่าน repository ของตนเองและให้ service อื่นเรียกผ่าน API เท่านั้น
+* เมื่อรัน service ด้วย Docker ให้ mount volume แยกต่อ service ไปยังโฟลเดอร์ข้อมูล; ห้าม bake ข้อมูลจริงลงใน image หรือ commit ไฟล์ข้อมูลเข้า Git แผนนี้รองรับ service ละหนึ่ง replica
 
 ## **สมาชิก 1 — Project Manager และ Auth Service**
 
-* วันแรก: สร้าง/จัดระเบียบ 5 repositories, ตั้งชื่อ service และ port (Auth 3001, Profile 3002, Group 3003, Membership 3004, Notification 3005), ทำ README และ API\_CONTRACT.md กลาง แล้วคัดลอกสัญญาเวอร์ชันเดียวกันไปยังทุก repository  
-* จัดทำ Test Specification อย่างน้อย 5 กรณี โดยแต่ละกรณีระบุ Test ID, requirement, precondition, test data, ขั้นตอน, expected result และผู้รับผิดชอบ เช่น login ถูก/ผิด, ข้อมูลสร้างกลุ่มไม่ครบ, ค้นหาเฉพาะกลุ่มที่เปิดรับ, ขอเข้ากลุ่มซ้ำ และกลุ่มเต็ม  
-* สร้างแม่แบบ GitHub Actions ให้รัน install → typecheck → build → unit test → Docker build เมื่อเปิด Pull Request และจัดให้สมาชิกแต่ละคนติดตั้ง workflow เดียวกัน พร้อมเก็บ Docker Hub credentials ใน GitHub Secrets  
-* พัฒนา Auth Service และหน้า Login: POST /api/login รับ username/password แล้วคืน userId และ token เมื่อสำเร็จ; GET /api/me ตรวจ token; ข้อมูลผิดหรือไม่มี/หมดอายุ token ต้องได้ 401  
-* เพิ่ม unit tests สำหรับ login สำเร็จ, รหัสผ่านผิด, ผู้ใช้ไม่มี, token ใช้ได้ และ token ผิด/หมดอายุ รวมทั้งตรวจว่า password ถูกเก็บแบบ hash ไม่ใช่ plain text  
-* กำหนดมาตรฐานการยืนยันตัวตนร่วมกับสมาชิก 2–5 ตั้งแต่วันแรก: protected endpoints ส่ง Authorization: Bearer token; ห้ามเชื่อ userId/ownerId จาก request body โดยไม่ตรวจสิทธิ์ ให้ระบุวิธีตรวจ token และ secret ใน API\_CONTRACT.md ก่อนทุกคนลงมือ  
+* จัดโครงสร้าง repository กลางให้มีโฟลเดอร์ `services/auth-service/`, `services/profile-service/`, `services/group-service/`, `membership-service/` และ `notification-service/`; ใช้ port 3001–3005 ตามลำดับ และเก็บ `API_CONTRACT.md`, `TEST_SPEC.md` กับ GitHub Actions workflow ไว้ส่วนกลาง ไม่ต้องคัดลอกเอกสารหรือ workflow ไปยัง repository แยก
+* จัดทำ Test Specification อย่างน้อย 5 กรณี โดยแต่ละกรณีระบุ Test ID, requirement, precondition, test data, ขั้นตอน, expected result และผู้รับผิดชอบ เช่น login ถูก/ผิด, ข้อมูลสร้างกลุ่มไม่ครบ, ค้นหาเฉพาะกลุ่มที่เปิดรับ, ขอเข้ากลุ่มซ้ำ และกลุ่มเต็ม; เพิ่มการตรวจว่าข้อมูล JSON อยู่ต่อเมื่อ service restart โดยใช้ volume
+* ดูแล GitHub Actions workflow กลางให้ตรวจ service ที่ได้รับผลกระทบเมื่อเปิด Pull Request โดยรัน install → typecheck → build → unit test และ Docker build ตามความเหมาะสม; เก็บ credentials สำหรับ push image ใน GitHub Secrets
+* พัฒนา Auth Service และหน้า Login/Register: `POST /api/register` รับ email, name และ password โดยใช้ email เป็น username ตรวจรูปแบบอีเมล/บัญชีซ้ำและเงื่อนไขรหัสผ่าน พร้อมเก็บ password hash ด้วย bcrypt ในไฟล์ JSON ของ Auth; `POST /api/login` คืน userId และ token เมื่อสำเร็จ; `GET /api/me` ตรวจ token
+* เพิ่ม unit tests สำหรับสมัครสำเร็จ/อีเมลซ้ำ/รหัสผ่านไม่ผ่าน, login สำเร็จ/ข้อมูลผิด, token ใช้ได้/ผิด/หมดอายุ และตรวจว่า password ถูกเก็บเป็น hash ไม่ใช่ plain text
+* กำหนดมาตรฐานยืนยันตัวตนร่วมกับสมาชิก 2–5: protected endpoints ส่ง `Authorization: Bearer <token>`; ใช้ `userId` ใน token เป็นตัวระบุผู้ใช้ ห้ามเชื่อ userId/ownerId จาก request body โดยไม่ตรวจสิทธิ์ และเก็บ secret ใน environment ตาม API\_CONTRACT.md
 * ประสานงานประจำวัน: เช็กสถานะงานและ blocker, ตรวจว่า PR มี test และ CI ผ่าน, ขอสมาชิกอื่น review ก่อน merge และสรุปการเปลี่ยนแปลง API ให้ทั้งทีมทราบ  
-* วันสุดท้าย: ตรวจ tag/release, ประสานให้ทุก image ใช้ tag v1.0.0, ตรวจผล push ที่ Registry และเตรียมสาธิต pipeline กับอธิบายหน้าที่ PM/Auth
+* ก่อนส่งงาน: ตรวจ tag/release ให้ image ของทุก service ใช้ version ที่ตกลงกัน ตรวจผล push ที่ Registry และเตรียมสาธิต pipeline พร้อมอธิบายหน้าที่ PM/Auth
 
 ## **สมาชิก 2 — Profile & Subject Service**
 
@@ -93,24 +95,24 @@ Pipeline ที่เสนอ: Pull Request → type check/build/unit test → 
 
 ## **สมาชิก 5 — Notification Service และผู้ประสานงานทดสอบ (Tester)**
 
-* ทำ API: GET /api/notifications/:userId อ่านรายการ, POST /api/notifications สร้างรายการจาก Membership Service, PATCH /api/notifications/:id/read ทำเครื่องหมายว่าอ่านแล้ว; ป้องกันผู้ใช้ดูหรือแก้ notification ของคนอื่น  
+* ทำ API ตาม API\_CONTRACT.md: `POST /internal/notifications` รับ event จาก Membership Service, `GET /api/notifications` ให้ผู้ใช้ดูรายการของตนจาก userId ใน token และ `PATCH /api/notifications/:id/read` ทำเครื่องหมายว่าอ่านแล้ว; ป้องกันผู้ใช้ดูหรือแก้ notification ของคนอื่น  
 * ทำ unit tests สำหรับสร้าง/อ่าน/mark as read, user ไม่ตรงสิทธิ์, notification ไม่มี และรูปแบบข้อมูลผิด พร้อมหน้า notifications.html หรือส่วนแสดงการแจ้งเตือนในหน้าเว็บ  
 * รวบรวม Test Specification จาก PM เป็น automated tests; ทำ integration/e2e test ที่รันบริการตามลำดับและตรวจ flow login → ตั้งวิชา → สร้างกลุ่ม → ขอเข้าร่วม → เจ้าของอนุมัติ → ผู้ขอเห็นแจ้งเตือน  
-* ตรวจผล CI ของทั้ง 5 repositories, เปิด issue พร้อมขั้นตอนทำซ้ำและผลที่คาด/ได้จริง, จัดลำดับ bug ตามความรุนแรง และมอบให้เจ้าของ service แก้ จากนั้นรันทดสอบซ้ำและบันทึกผล  
+* ตรวจผล CI ของ service ทั้งหมดจาก repository กลาง, เปิด issue พร้อมขั้นตอนทำซ้ำและผลที่คาด/ได้จริง, จัดลำดับ bug ตามความรุนแรง และมอบให้เจ้าของ service แก้ จากนั้นรันทดสอบซ้ำและบันทึกผล
 * ผู้ประสานงานทดสอบไม่ใช่ผู้เขียน test เพียงคนเดียว: เจ้าของแต่ละ service ต้องดูแล unit tests ของตน ส่วนสมาชิก 5 ดูแลการประกอบชุดทดสอบและรายงานผลรวม
 
 # **9\. ข้อตกลงการเชื่อมต่อและการส่งต่องาน**
 
 * Environment variables ใช้ AUTH\_URL, PROFILE\_URL, GROUP\_URL, MEMBER\_URL และ NOTIFY\_URL โดยมีค่า default สำหรับ local ที่ localhost:3001–3005; ห้ามเขียน URL ปลายทางตายตัวใน source code  
 * ทุก API ส่งและรับ JSON ใช้ชื่อ field และ HTTP status ตาม API\_CONTRACT.md; เวลานัดใช้รูปแบบ ISO 8601 พร้อม timezone ที่ทีมตกลง; response error ควรมีโครงสร้างเดียวกัน เช่น { error, message }  
-* แต่ละ repository มี .env.example ที่ไม่มี secret จริง, README สำหรับติดตั้ง/ทดสอบ/รัน, Dockerfile และ GitHub Actions workflow; อย่า commit .env, password, token หรือข้อมูลส่วนตัว  
+* แต่ละ service folder มี `.env.example` ที่ไม่มี secret จริง, README สำหรับติดตั้ง/ทดสอบ/รัน และ Dockerfile; ใช้ GitHub Actions workflow กลางที่ root ของ repository; อย่า commit `.env`, password, token หรือข้อมูลส่วนตัว
 * ทำงานผ่าน branch เช่น feature/auth-login หรือ fix/group-capacity; ห้าม push ตรงเข้า main. Pull Request ต้องอธิบายการเปลี่ยนแปลง, วิธีทดสอบ, ผล test และการเปลี่ยน API; อย่างน้อยหนึ่งคนที่ไม่ใช่ผู้เขียน review ก่อน merge  
 * เมื่อ service เปลี่ยน contract ให้แจ้งผู้ใช้ปลายทางของ API, อัปเดต API\_CONTRACT.md, ปรับ mock/consumer tests และ merge การเปลี่ยนแปลงที่เข้ากันได้ก่อน deploy รุ่นใหม่
 
 # **10\. ลำดับงานร่วมกันตามขั้นตอน**
 
 1. ยืนยันขอบเขตและสัญญากลาง — PM รวบรวม requirement, API\_CONTRACT.md, ports, environment variables, รูปแบบ error, วิธีตรวจ token, เจ้าของข้อมูลสมาชิก/ที่นั่ง และ Test Specification; สมาชิกทุกคน review และยืนยันก่อนเริ่มเชื่อม service  
-2. ตั้งโครงและเครื่องมือของทุก service — สร้าง repository/branch, โครง source และ test, database, health endpoint, .env.example, README, Dockerfile และ GitHub Actions พื้นฐาน; แต่ละ service ต้องติดตั้งและรัน local ได้ และมี test เริ่มต้น  
+2. ตั้งโครงและเครื่องมือของทุก service — สร้าง branch สำหรับงานและโฟลเดอร์ของแต่ละ service ใน repository กลาง พร้อมโครง source และ test, JSON data file ที่แยกตาม service, health endpoint, `.env.example`, README และ Dockerfile; ตั้ง GitHub Actions workflow ที่ root; แต่ละ service ต้องติดตั้งและรัน local ได้ และมี test เริ่มต้น
 3. พัฒนา service ตามสัญญา — เจ้าของแต่ละ service ทำ API, validation, authorization, unit tests และหน้าเว็บที่เกี่ยวข้อง; เปิด Pull Request ขนาดเล็กพร้อมวิธีทดสอบและให้สมาชิกอีกคน review ก่อน merge  
 4. เชื่อมหน้าเว็บและบริการเข้าด้วยกัน — ตั้งค่า URL ผ่าน environment, เชื่อม login/token, profile/วิชา, กลุ่มอ่าน, คำขอสมาชิก และ notification; ทดลอง flow หลักจากต้นจนจบและแก้ response, CORS, port หรือ permission ที่ไม่ตรงกัน  
 5. ทดสอบรวมและทำให้ระบบเสถียร — รัน unit, integration, end-to-end, smoke และ regression tests; บันทึก bug พร้อมขั้นตอนทำซ้ำ ให้เจ้าของ service แก้และรันทดสอบซ้ำ; build และทดลองรันแต่ละ Docker image  
