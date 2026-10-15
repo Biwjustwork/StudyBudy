@@ -66,7 +66,7 @@
       { id: 'mock-closed', subject: 'Calculus', topic: 'Integrals', startsAt: isoDay(3), maxMembers: 5, location: 'Room B', ownerId: 'u4', members: ['u4'], isOpen: false }
     ];
 
-    // Same logic as GET /api/groups in group-service/src/app.ts:
+    // Same logic as GET /api/groups in services/group-service/src/app.ts:
     // subject: trim + toLocaleLowerCase exact match (empty = all),
     // openOnly=true: keep isOpen && members.length < maxMembers,
     // sort by startsAt ascending.

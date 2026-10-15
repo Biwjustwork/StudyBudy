@@ -3,11 +3,11 @@ name: Profile Service CI
 on:
   push:
     paths:
-      - 'profile-service/**'
+      - 'services/profile-service/**'
       - '.github/workflows/profile-service.yml'
   pull_request:
     paths:
-      - 'profile-service/**'
+      - 'services/profile-service/**'
       - '.github/workflows/profile-service.yml'
   workflow_dispatch:
 
@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: profile-service
+        working-directory: services/profile-service
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: profile-service/package-lock.json
+          cache-dependency-path: services/profile-service/package-lock.json
 
       - name: Install dependencies
         run: npm ci

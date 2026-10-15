@@ -2,7 +2,7 @@
 
 ## ทำแล้ว
 
-- ตั้งโครง Profile & Subject Service ไว้ในโฟลเดอร์ `profile-service`
+- ตั้งโครง Profile & Subject Service ไว้ในโฟลเดอร์ `services/profile-service`
 - ทำ API อ่านโปรไฟล์และแก้รายการวิชาของผู้ใช้: `GET /api/users/:id` และ `PUT /api/users/:id`
 - ทำ API ค้นหาผู้ใช้ตามวิชา: `GET /api/users/search?subject=...`
 - เพิ่ม validation: วิชาต้องเป็นข้อความที่ไม่ว่าง ตัดช่องว่างหัวท้าย และไม่รับชื่อซ้ำโดยไม่นับตัวพิมพ์เล็ก/ใหญ่

@@ -38,7 +38,7 @@ docker build -t study-buddy-profile:local .
 
 ## GitHub Actions CI
 
-The workflow in [profile-service.yml](../.github/workflows/profile-service.yml) runs on pushes and pull requests that change `profile-service/**` or the workflow itself. You can also run **Profile Service CI** manually from the repository's **Actions** tab once the workflow is on the default branch.
+The workflow in [profile-service.yml](../../.github/workflows/profile-service.yml) runs on pushes and pull requests that change `services/profile-service/**` or the workflow itself. You can also run **Profile Service CI** manually from the repository's **Actions** tab once the workflow is on the default branch.
 
 Using Node.js 22, it runs `npm ci` → `npm run typecheck` → `npm run build` → `npm test` → `docker build`. A failed step stops the remaining steps. Dependencies are installed from the committed `package-lock.json`, with npm downloads cached between runs. Docker builds use the same lockfile.
 

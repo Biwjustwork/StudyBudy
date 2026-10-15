@@ -3,7 +3,7 @@
 Group API owned by member 3. It stores each study group's subject, topic, meeting time, capacity, and member list, supports subject search with an open-seats filter, lets only the group owner edit groups, reserves seats for the Membership Service via a service-token internal route, and protects all `/api` routes with the shared Auth Service JWT.
 
 ```
-group-service/
+services/group-service/
   src/
     server.ts       # env wiring only (PORT, AUTH_TOKEN_SECRET, SERVICE_TOKEN, GROUP_DATA_FILE)
     app.ts          # HTTP/auth/validation/status; createApp(store, tokenSecret, serviceToken)

@@ -5,7 +5,7 @@
 ## 1. ขอบเขตและเกณฑ์ผ่าน
 
 - ครอบคลุมสร้าง/ค้นหา/อ่าน/แก้กลุ่ม และ internal endpoint ที่ Membership เรียก
-- Unit tests ปัจจุบัน 18 กรณีใน `src/app.test.ts` ต้องผ่านทั้งหมด (`npm ci && npm run typecheck && npm run build && npm test`, workdir `group-service/`)
+- Unit tests ปัจจุบัน 18 กรณีใน `src/app.test.ts` ต้องผ่านทั้งหมด (`npm ci && npm run typecheck && npm run build && npm test`, workdir `services/group-service/`)
 - ผลจริงต้องตรง expected result และไม่มี secret ใน log/response
 - PR ที่เปลี่ยน API ต้องรัน consumer tests ฝั่ง Membership ด้วย
 
