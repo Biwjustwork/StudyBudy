@@ -10,9 +10,9 @@ npm ci
 npm run dev
 ```
 
-Set `AUTH_TOKEN_SECRET` to the same secret used by Auth Service. The service expects HS256 tokens with a `userId` claim. Do not commit `.env` or use a real secret in it. `PROFILE_DATA_FILE` defaults to `./data/profiles.json`; the JSON array is atomically updated and excluded from Git.
+Set `AUTH_TOKEN_SECRET` to the same secret used by Auth Service. The service accepts only HS256 tokens with a non-empty string `userId` and a future numeric `exp`. Tokens without `exp` or with an expired `exp` receive `401`. Do not commit `.env` or real secrets. Values in `.env.example` are placeholders only. `PROFILE_DATA_FILE` defaults to `./data/profiles.json`; updates are written through a temporary file and committed to in-memory state only after the file write succeeds.
 
-Auth Service provisions a profile after registration through `POST /internal/users` with `X-Service-Token`. The service creates a record with the same ID as Auth's `userId` and `subjects: []`. Set `PROFILE_SERVICE_TOKEN` to the shared service-to-service secret in both services' runtime environments; never put it in browser code, source files, or `.env.example`. The JSON file is owned and written only by Profile Service; Auth must call the endpoint instead of editing that file.
+Auth Service provisions a profile after registration through `POST /internal/users` with `X-Service-Token`. The service creates a record with the same ID as Auth's `userId` and `subjects: []`, returning `201`; an identical retry returns the existing record with `200`, while a conflicting ID returns `409`. Missing/incorrect service tokens return `401`; invalid/missing fields (including malformed email) return `400`. Set `PROFILE_SERVICE_TOKEN` to the same locally generated service-to-service token in both services' runtime environments; never put a real token in browser code, source files, or Git. The JSON file is owned and written only by Profile Service; Auth must call the endpoint instead of editing that file.
 
 ## API
 
@@ -26,7 +26,7 @@ All `/api` routes require `Authorization: Bearer <token>`. Profile GET/PUT only 
 | PUT | `/api/users/:id` | Replace own subject list, e.g. `{ "subjects": ["Biology", "Calculus"] }` |
 | GET | `/api/users/search?subject=Biology` | Find profiles interested in a subject; returns `[]` when none match |
 
-Subject names are trimmed, must be non-empty strings, and may not repeat (case-insensitive). Status codes: 400 invalid input, 401 missing/invalid/expired token, 403 another user's profile, 404 unknown user, 200 success.
+Subject names are trimmed, must be non-empty strings, and may not repeat (case-insensitive). API errors, including unknown URLs, use `{ "error": "...", "message": "..." }`. Status codes: 400 invalid input, 401 missing/invalid/expired token, 403 another user's profile, 404 unknown user/route, 200 success.
 
 For `POST /internal/users`, a new profile returns 201, an identical retry returns 200 with the existing profile, and a reused ID with a different name or email returns 409 without changing the stored profile. Missing/incorrect service token returns 401; invalid fields return 400.
 
