@@ -46,3 +46,23 @@
 ในผล CI หรือรายงานทดสอบ ให้บันทึก Test ID, commit/branch, environment, ผล `PASS/FAIL`, expected/actual, ลิงก์ log และ bug/PR ที่เกี่ยวข้อง ห้ามบันทึก token, password หรือค่าจริงของ secrets
 
 กรณี FAIL ให้เจ้าของ service ที่เกี่ยวข้องแก้ไขใน branch/PR ของตน ผู้ทดสอบบันทึกขั้นตอนทำซ้ำและรันทดสอบเดิมซ้ำหลังแก้; ผู้ทดสอบตรวจและรายงานผล แต่ไม่แก้โค้ดแทนเจ้าของ service
+
+## 4. Automated end-to-end flow
+
+รัน flow จริงข้ามทั้ง 5 service ด้วย Docker Compose บน Windows PowerShell:
+
+```powershell
+./tests/run-flow.ps1
+```
+
+ถ้าพอร์ต 3001–3005 ว่าง สคริปต์จะ build และเปิด stack แยกพร้อมชื่อ project ชั่วคราว จากนั้นลบเฉพาะ container และ volume ของ stack ทดสอบเมื่อจบ หาก service ทั้งห้ากำลังเปิดอยู่แล้ว สคริปต์จะทดสอบกับ stack นั้นและเก็บข้อมูลทดสอบไว้; ใช้บัญชีและกลุ่มชื่อไม่ซ้ำกันทุกครั้ง หากเปิดอยู่เพียงบาง service สคริปต์จะหยุดเพื่อป้องกันการชนพอร์ต
+
+ทุกกรณีทดสอบ health, สมัครสมาชิก 2 บัญชีและ provision profile, login, บันทึก/ค้นหาวิชา, สร้างและค้นหากลุ่ม, ส่งคำขอเข้าร่วม, ตรวจคำขอซ้ำ, อนุมัติ, ตรวจสมาชิกในกลุ่ม, รับ notification และ mark-as-read
+
+สามารถเรียกตัวทดสอบ Node โดยตรงได้เมื่อเปิด service ทั้งห้าบนพอร์ต 3001–3005 แล้ว:
+
+```sh
+node tests/flow-smoke.mjs
+```
+
+ตัวทดสอบใช้เฉพาะ Node.js built-in modules และสร้างบัญชี/กลุ่มทดสอบชื่อไม่ซ้ำกัน; การเรียกโดยตรงจะเก็บ record ไว้ใน data store ของ service ที่กำลังเปิดอยู่ จึงควรใช้ environment สำหรับทดสอบ
