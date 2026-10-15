@@ -87,16 +87,25 @@ export class RequestStore {
     this.groupOperationLocks.delete(groupId);
   }
 
-  async create(groupId: string, requesterId: string): Promise<MembershipRequest | undefined> {
+  async create(
+    groupId: string,
+    requesterId: string,
+    notificationEvent?: Omit<NotificationEvent, "relatedId">,
+  ): Promise<MembershipRequest | undefined> {
     if (this.find(groupId, requesterId)) return undefined;
     const now = new Date().toISOString();
+    const requestId = randomUUID();
     const request: MembershipRequest = {
-      id: randomUUID(),
+      id: requestId,
       groupId,
       requesterId,
       status: "pending",
       createdAt: now,
       updatedAt: now,
+      ...(notificationEvent ? {
+        notificationEvent: { ...structuredClone(notificationEvent), relatedId: requestId },
+        notificationStatus: "pending" as const,
+      } : {}),
     };
     this.requests.set(request.id, request);
     try {
@@ -117,7 +126,7 @@ export class RequestStore {
 
   beginNotificationDelivery(id: string): boolean {
     const request = this.requests.get(id);
-    if (!request || request.status === "pending" || request.notificationStatus !== "pending"
+    if (!request || request.notificationStatus !== "pending" || !request.notificationEvent
       || this.notificationLocks.has(id)) return false;
     this.notificationLocks.add(id);
     return true;
@@ -177,7 +186,7 @@ export class RequestStore {
 
   pendingNotifications(): MembershipRequest[] {
     return [...this.requests.values()]
-      .filter((request) => request.status !== "pending" && request.notificationStatus === "pending")
+      .filter((request) => request.notificationStatus === "pending" && request.notificationEvent !== undefined)
       .map((request) => structuredClone(request));
   }
 
@@ -214,7 +223,7 @@ export class RequestStore {
     lastError?: string,
   ): Promise<MembershipRequest> {
     const request = this.requests.get(id);
-    if (!request || request.status === "pending") throw new Error("Decided membership request not found");
+    if (!request) throw new Error("Membership request not found");
     const previous = structuredClone(request);
     request.notificationStatus = status;
     if (lastError === undefined) delete request.notificationLastError;
@@ -265,7 +274,9 @@ function isNotificationEvent(value: unknown): value is NotificationEvent {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const event = value as Partial<NotificationEvent>;
   return typeof event.userId === "string" && event.userId.trim().length > 0
-    && (event.type === "request_approved" || event.type === "request_rejected")
+    && (event.type === "request_received" || event.type === "request_approved" || event.type === "request_rejected")
     && typeof event.message === "string" && event.message.trim().length > 0 && event.message.length <= 2000
-    && typeof event.relatedId === "string" && event.relatedId.trim().length > 0;
+    && typeof event.relatedId === "string" && event.relatedId.trim().length > 0
+    && (event.groupId === undefined || typeof event.groupId === "string" && event.groupId.trim().length > 0)
+    && (event.type !== "request_received" || typeof event.groupId === "string");
 }

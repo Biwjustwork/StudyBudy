@@ -103,6 +103,11 @@ type Group = {
   createdAt?: string;
 };
 
+type GroupMember = {
+  name: string;
+  isOwner: boolean;
+};
+
 type MembershipRequest = {
   id: string;
   groupId: string;
@@ -118,9 +123,10 @@ type MembershipRequest = {
 type NotificationItem = {
   id: string;
   userId: string;
-  type: 'request_approved' | 'request_rejected';
+  type: 'request_received' | 'request_approved' | 'request_rejected';
   message: string;
   relatedId: string;
+  groupId?: string;
   read: boolean;
   createdAt: string;
   readAt: string | null;
@@ -401,18 +407,21 @@ async function showWorkspace() {
   switchTab('groups');
 
   // Load user profile & notifications
-  await Promise.all([loadProfile(), loadNotifications()]);
+  await Promise.all([loadProfile(), loadNotifications(), pollRequestsBadge()]);
 
   // Start notification polling every 15 seconds
   if (notificationPollTimer === null) {
-    notificationPollTimer = window.setInterval(pollNotifications, 15000);
+    notificationPollTimer = window.setInterval(() => {
+      void pollNotifications();
+      void pollRequestsBadge();
+    }, 15000);
   }
 }
 
 // ================= Navigation Tabs =================
 type TabName = 'groups' | 'requests' | 'profile';
 
-function switchTab(tab: TabName) {
+async function switchTab(tab: TabName, focusGroupId?: string) {
   tabGroups.classList.toggle('active', tab === 'groups');
   tabRequests.classList.toggle('active', tab === 'requests');
   tabProfile.classList.toggle('active', tab === 'profile');
@@ -428,7 +437,11 @@ function switchTab(tab: TabName) {
   if (tab === 'groups') {
     void loadGroups();
   } else if (tab === 'requests') {
-    void loadRequests();
+    await loadRequests();
+    if (focusGroupId) {
+      document.querySelector<HTMLElement>(`[data-owner-group-id="${CSS.escape(focusGroupId)}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   } else if (tab === 'profile') {
     void loadProfile();
   }
@@ -539,7 +552,11 @@ function renderGroups(groups: Group[]) {
           </div>
           <div class="group-card-footer">
             ${actionHtml}
+            <button class="button button-quiet button-sm" data-action="view-members" data-group-id="${escapeAttribute(group.id)}" aria-expanded="false">
+              ดูสมาชิก (${group.members.length})
+            </button>
           </div>
+          <div class="group-members-panel hidden" data-members-panel="${escapeAttribute(group.id)}" aria-live="polite"></div>
         </article>
       `;
     })
@@ -556,6 +573,37 @@ function renderGroups(groups: Group[]) {
   groupsList.querySelectorAll('[data-action="view-requests"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       switchTab('requests');
+    });
+  });
+
+  groupsList.querySelectorAll<HTMLButtonElement>('[data-action="view-members"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const groupId = btn.dataset.groupId;
+      const card = btn.closest<HTMLElement>('.group-card');
+      const panel = card?.querySelector<HTMLElement>('.group-members-panel');
+      if (!groupId || !panel) return;
+      if (!panel.classList.contains('hidden')) {
+        panel.classList.add('hidden');
+        btn.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      panel.classList.remove('hidden');
+      btn.setAttribute('aria-expanded', 'true');
+      if (panel.dataset.loaded === 'true') return;
+      panel.innerHTML = '<p class="group-members-loading">กำลังโหลดรายชื่อสมาชิก…</p>';
+      try {
+        const members = await apiRequest<GroupMember[]>(memberUrl,
+          `/api/groups/${encodeURIComponent(groupId)}/members`, { method: 'GET' });
+        panel.innerHTML = members.length
+          ? `<ul class="group-members-list">${members.map((member) => `
+              <li><span class="member-avatar" aria-hidden="true">${escapeHtml(member.name.charAt(0) || 'ส')}</span>
+                <span>${escapeHtml(member.name)}</span>${member.isOwner ? '<span class="badge-owner">เจ้าของกลุ่ม</span>' : ''}</li>
+            `).join('')}</ul>`
+          : '<p class="group-members-loading">ยังไม่มีสมาชิกในกลุ่ม</p>';
+        panel.dataset.loaded = 'true';
+      } catch (error) {
+        panel.innerHTML = `<p class="group-members-error">${escapeHtml((error as Error).message)}</p>`;
+      }
     });
   });
 
@@ -675,7 +723,7 @@ async function loadRequests() {
           }
 
           return `
-            <div class="owner-group-box">
+            <div class="owner-group-box" data-owner-group-id="${escapeAttribute(group.id)}">
               <div class="owner-group-header">
                 <div>
                   <span class="subject-badge">${escapeHtml(group.subject)}</span>
@@ -804,8 +852,38 @@ async function pollNotifications() {
       notiBadge.classList.add('hidden');
       notiUnreadText.textContent = 'ไม่มีข้อความใหม่';
     }
+    if (!notiDropdown.classList.contains('hidden')) {
+      const latestId = page.items[0]?.id;
+      const displayedLatestId = notiList.querySelector<HTMLElement>('.noti-item')?.dataset.id;
+      if (latestId && latestId !== displayedLatestId) void loadNotifications();
+    }
   } catch {
     // Silent fail in background polling
+  }
+}
+
+async function pollRequestsBadge() {
+  if (!token() || !currentUserId()) return;
+  try {
+    const groups = await apiRequest<Group[]>(groupUrl, '/api/groups', { method: 'GET' });
+    const ownedGroups = groups.filter((group) => group.ownerId === currentUserId());
+    const requestLists = await Promise.all(ownedGroups.map((group) => apiRequest<MembershipRequest[]>(
+      memberUrl,
+      `/api/requests?groupId=${encodeURIComponent(group.id)}`,
+      { method: 'GET' },
+    )));
+    const pendingCount = requestLists.reduce(
+      (total, requests) => total + requests.filter((request) => request.status === 'pending').length,
+      0,
+    );
+    if (pendingCount > 0) {
+      requestsBadge.textContent = pendingCount > 99 ? '99+' : String(pendingCount);
+      requestsBadge.classList.remove('hidden');
+    } else {
+      requestsBadge.classList.add('hidden');
+    }
+  } catch {
+    // Keep the last known badge if a background request temporarily fails.
   }
 }
 
@@ -864,10 +942,11 @@ function updateNotificationUnread(unread: number) {
 function appendNotificationItems(list: NotificationItem[]) {
   notiList.insertAdjacentHTML('beforeend', list
     .map((item) => {
-      const isApproved = item.type === 'request_approved';
-      const badgeType = isApproved
-        ? '<span class="noti-badge-type approved">อนุมัติแล้ว</span>'
-        : '<span class="noti-badge-type rejected">ไม่ได้รับการอนุมัติ</span>';
+      const badgeType = item.type === 'request_received'
+        ? '<span class="noti-badge-type received">คำขอใหม่</span>'
+        : item.type === 'request_approved'
+          ? '<span class="noti-badge-type approved">อนุมัติแล้ว</span>'
+          : '<span class="noti-badge-type rejected">ไม่ได้รับการอนุมัติ</span>';
 
       return `
           <div class="noti-item ${item.read ? '' : 'unread'}" data-id="${item.id}">
@@ -876,6 +955,9 @@ function appendNotificationItems(list: NotificationItem[]) {
               <span>${formatDate(item.createdAt)}</span>
             </div>
             <div class="noti-msg">${escapeHtml(item.message)}</div>
+            ${item.type === 'request_received' && item.groupId
+              ? `<button class="noti-open-requests-btn" data-group-id="${escapeAttribute(item.groupId)}" data-id="${escapeAttribute(item.id)}">ตรวจคำขอเข้าร่วม</button>`
+              : ''}
             ${
               !item.read
                 ? `<button class="noti-mark-read-btn" data-id="${item.id}">✓ ทำเครื่องหมายว่าอ่านแล้ว</button>`
@@ -891,6 +973,16 @@ function appendNotificationItems(list: NotificationItem[]) {
     btn.addEventListener('click', (e) => {
       const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
       if (id) void markNotificationAsRead(id);
+    });
+  });
+  notiList.querySelectorAll<HTMLButtonElement>('.noti-open-requests-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const groupId = btn.dataset.groupId;
+      const notificationId = btn.dataset.id;
+      if (!groupId) return;
+      if (notificationId) await markNotificationAsRead(notificationId);
+      notiDropdown.classList.add('hidden');
+      await switchTab('requests', groupId);
     });
   });
 }

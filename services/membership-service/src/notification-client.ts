@@ -1,8 +1,9 @@
 export type NotificationEvent = {
   userId: string;
-  type: "request_approved" | "request_rejected";
+  type: "request_received" | "request_approved" | "request_rejected";
   message: string;
   relatedId: string;
+  groupId?: string;
 };
 
 export interface NotificationClient {

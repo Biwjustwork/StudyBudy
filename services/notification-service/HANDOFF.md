@@ -30,7 +30,7 @@ X-Service-Token: <NOTIFY_SERVICE_TOKEN from environment>
 }
 ```
 
-ปฏิเสธใช้ `request_rejected` และข้อความที่เหมาะสม. `relatedId` คือ request ID ไม่ใช่ group ID. ผู้รับคือ requester ไม่ใช่ owner/ผู้ตัดสิน. Header ไม่ใช้ Bearer JWT และไม่ส่ง internal token ไปหน้าเว็บ.
+ปฏิเสธใช้ `request_rejected` และข้อความที่เหมาะสม. `relatedId` คือ request ID. สำหรับ `request_received` ผู้รับคือเจ้าของกลุ่มและต้องแนบ `groupId` เพื่อให้หน้าเว็บพาไปยังรายการคำขอได้; สำหรับผลอนุมัติ/ปฏิเสธ ผู้รับคือ requester. Header ไม่ใช้ Bearer JWT และไม่ส่ง internal token ไปหน้าเว็บ.
 
 | ผล HTTP | การจัดการที่ Membership ต้องทำ |
 |---|---|
@@ -41,7 +41,7 @@ X-Service-Token: <NOTIFY_SERVICE_TOKEN from environment>
 | `401` | ตรวจ service token/config; อย่าตัดสินคำขอหรือเพิ่มสมาชิกซ้ำ |
 | `409` | key เดิมแต่ message ต่าง; ตรวจ event ที่บันทึกไว้ ห้ามเปลี่ยน payload ระหว่าง retry |
 
-Notification deduplicate ด้วย `(userId, relatedId, type)` และไม่ reset สถานะอ่านเมื่อ retry. Membership ต้องเก็บ payload/สถานะการส่งให้ retry ได้หลัง restart และแยก retry notification ออกจากการอนุมัติ/เพิ่มสมาชิก. ฝั่ง Notification พร้อมรับ event; การเพิ่ม sender/retry ใน `membership-service` ยังเป็นงานของเจ้าของ service นั้น.
+Notification deduplicate ด้วย `(userId, relatedId, type)` และไม่ reset สถานะอ่านเมื่อ retry. Membership เก็บ payload/สถานะการส่งไว้ใน request store เพื่อ retry หลัง restart และแยก retry notification ออกจากการอนุมัติ/เพิ่มสมาชิก.
 
 ## สำหรับทีมรวมโค้ด / PM
 

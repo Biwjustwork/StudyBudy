@@ -92,8 +92,13 @@ function validateEvent(input: unknown): NotificationEvent | null {
     if (typeof body[field] !== "string" || !(body[field] as string).trim()) return null;
   }
   const type = (body.type as string).trim();
-  if (type !== "request_approved" && type !== "request_rejected") return null;
+  if (type !== "request_received" && type !== "request_approved" && type !== "request_rejected") return null;
+  const groupId = body.groupId;
+  if (type === "request_received" && (typeof groupId !== "string" || !groupId.trim())) return null;
   const message = (body.message as string).trim();
   if (message.length > 2000) return null;
-  return { userId: (body.userId as string).trim(), type, message, relatedId: (body.relatedId as string).trim() };
+  return {
+    userId: (body.userId as string).trim(), type, message, relatedId: (body.relatedId as string).trim(),
+    ...(typeof groupId === "string" ? { groupId: groupId.trim() } : {}),
+  };
 }

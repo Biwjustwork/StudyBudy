@@ -2,6 +2,8 @@
 
 Membership API owned by member 4. It stores join requests, permits only the group owner to list or decide them, and reserves seats through the Group Service rather than editing Group data locally.
 
+When someone submits a join request, Membership persists a `request_received` notification for the group owner, including the group ID so the frontend can open that group's request list. Failed delivery remains queued in Membership and is retried when the service starts again.
+
 ## API
 
 All `/api` endpoints require an Auth Service JWT signed with HS256 and containing a non-empty `userId` and an unexpired `exp` claim. Auth Service currently issues expiring tokens (default `JWT_EXPIRES_IN=1h`); Membership rejects tokens with no expiration.
@@ -11,6 +13,7 @@ All `/api` endpoints require an Auth Service JWT signed with HS256 and containin
 | GET | `/health` | Liveness check |
 | POST | `/api/requests` | Body `{ "groupId": "..." }`; creates a `pending` request from the token user; `201` |
 | GET | `/api/requests?groupId=...` | Group owner only; returns requests in creation order |
+| GET | `/api/groups/:id/members` | Authenticated group display-name list with owner flag; does not return email or user ID |
 | POST | `/api/requests/:id/approve` | Owner only; reserves a Group seat before marking the request `approved` |
 | POST | `/api/requests/:id/reject` | Owner only; marks a pending request `rejected` |
 | DELETE | `/api/groups/:id` | Owner only; deletes a group only when the owner is its sole member and no request is pending (`204`; otherwise `409`) |
@@ -22,9 +25,9 @@ Only one pending request is allowed per `(groupId, requesterId)`; after rejectio
 ## Cross-service behavior and recovery
 
 - **Group Service:** Membership reads group details with the owner’s bearer token, then reserves a seat with `POST /internal/groups/:id/members` and `X-Service-Token: SERVICE_TOKEN`. The token value must match Group Service’s `SERVICE_TOKEN`. Membership never edits Group data directly.
-- **Profile Service:** Membership resolves requester display names and email addresses through `POST /internal/users/lookup` with `X-Service-Token: PROFILE_SERVICE_TOKEN`. This lookup runs only after the caller is confirmed as the group owner. The service token stays between backend services.
+- **Profile Service:** Membership resolves requester display names and email addresses through `POST /internal/users/lookup` only after confirming the caller is the group owner. For the group member list, it uses `POST /internal/users/display-names` and returns names only; the service token stays between backend services.
 - **Recoverable approval:** Before calling Group, Membership durably records `approvalState: "reserving"`. After Group confirms the reservation, it durably records `approvalState: "reserved"` before changing the request to `approved`. If writing the final request decision fails after Group added the member, retry checks the authoritative group membership and finalizes the same request without adding the member again.
-- **Notification Service:** On approval/rejection, Membership saves a deterministic event in its request record and sends `POST /internal/notifications` with `X-Service-Token: NOTIFY_SERVICE_TOKEN`. A `201` or idempotent `200` marks it sent. Errors remain pending with their last error recorded; a startup and 30-second retry worker resends the same `(userId, relatedId, type, message)` payload, which Notification deduplicates.
+- **Notification Service:** On request creation, Membership saves a `request_received` event addressed to the group owner with `groupId`; on approval/rejection it saves the result event addressed to the requester. A `201` or idempotent `200` marks each event sent. Errors remain pending with their last error recorded; a startup and 30-second retry worker resends the same payload, which Notification deduplicates.
 - JSON-file persistence is designed for one process/replica per service, as specified in the shared contract. Give Membership, Group, and Notification separate persistent data volumes when running in containers.
 
 ## Contract compatibility

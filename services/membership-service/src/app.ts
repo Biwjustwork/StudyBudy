@@ -13,7 +13,7 @@ export function createApp(
   tokenSecret: string,
   groupClient: GroupClient,
   notificationClient: NotificationClient,
-  profileClient: ProfileClient = { getProfiles: async () => [] },
+  profileClient: ProfileClient = { getProfiles: async () => [], getDisplayNames: async () => [] },
 ) {
   if (tokenSecret.trim().length < 32) throw new Error("AUTH_TOKEN_SECRET must be at least 32 characters long");
   const app = express();
@@ -68,11 +68,27 @@ export function createApp(
       if (!group.isOpen || group.members.length >= group.maxMembers) {
         return response.status(422).json({ error: "capacity_exceeded", message: "Group is full or closed for new members" });
       }
-      const created = await store.create(groupId, request.userId as string);
+      let requesterName = "สมาชิกใหม่";
+      try {
+        const [profile] = await profileClient.getProfiles([request.userId as string]);
+        if (profile?.name.trim()) requesterName = profile.name.trim();
+      } catch {
+        // A profile lookup must not prevent a valid membership request.
+      }
+      const groupLabel = [group.subject, group.topic].filter((value) => value?.trim()).join(" · ")
+        || "กลุ่มอ่านหนังสือ";
+      const notificationEvent = {
+        userId: group.ownerId,
+        type: "request_received" as const,
+        message: `มีคำขอเข้าร่วมกลุ่ม “${groupLabel}” จาก ${requesterName}`,
+        groupId,
+      };
+      const created = await store.create(groupId, request.userId as string, notificationEvent);
       if (!created) {
         return response.status(409).json({ error: "conflict", message: "A request already exists for this user and group" });
       }
-      return response.status(201).json(publicRequest(created));
+      const delivered = await deliverNotification(store, notificationClient, created);
+      return response.status(201).json(publicRequest(delivered));
     } catch (error) {
       return sendGroupError(response, error);
     } finally {
@@ -101,6 +117,27 @@ export function createApp(
           requesterEmail: profile?.email ?? "ไม่พบอีเมล",
         };
       }));
+    } catch (error) {
+      if (error instanceof ProfileServiceError) {
+        return response.status(error.status).json({ error: "dependency_unavailable", message: "Profile Service is unavailable" });
+      }
+      return sendGroupError(response, error);
+    }
+  });
+
+  app.get("/api/groups/:id/members", async (request: AuthenticatedRequest, response: Response) => {
+    const groupId = request.params["id"];
+    if (typeof groupId !== "string") {
+      return response.status(400).json({ error: "validation_error", message: "groupId must be a string" });
+    }
+    try {
+      const group = await groupClient.getGroup(groupId, request.bearerToken as string);
+      const profiles = await profileClient.getDisplayNames(group.members);
+      const namesById = new Map(profiles.map((profile) => [profile.id, profile.name]));
+      return response.json(group.members.map((id) => ({
+        name: namesById.get(id) ?? "สมาชิก Study Buddy",
+        isOwner: id === group.ownerId,
+      })));
     } catch (error) {
       if (error instanceof ProfileServiceError) {
         return response.status(error.status).json({ error: "dependency_unavailable", message: "Profile Service is unavailable" });

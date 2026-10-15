@@ -4,9 +4,10 @@ import { dirname } from "node:path";
 
 export type NotificationEvent = {
   userId: string;
-  type: "request_approved" | "request_rejected";
+  type: "request_received" | "request_approved" | "request_rejected";
   message: string;
   relatedId: string;
+  groupId?: string;
 };
 
 export type Notification = NotificationEvent & {
@@ -158,7 +159,9 @@ function isNotification(value: unknown): value is Notification {
   const timestamp = (text: unknown): text is string => nonEmpty(text) && Number.isFinite(Date.parse(text));
   return nonEmpty(record.id) && nonEmpty(record.userId) && nonEmpty(record.relatedId)
     && nonEmpty(record.message) && record.message.length <= 2000
-    && (record.type === "request_approved" || record.type === "request_rejected")
+    && (record.type === "request_received" || record.type === "request_approved" || record.type === "request_rejected")
+    && (record.groupId === undefined || nonEmpty(record.groupId))
+    && (record.type !== "request_received" || nonEmpty(record.groupId))
     && timestamp(record.createdAt)
     && ((record.read === false && record.readAt === null) || (record.read === true && timestamp(record.readAt)));
 }

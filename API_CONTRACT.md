@@ -81,6 +81,10 @@ Request: `{ "id": "user-123", "name": "Aun", "email": "student@example.com" }`
 
 ใช้ `X-Service-Token` ค่าเดียวกับ `PROFILE_SERVICE_TOKEN`; Request `{ "ids": ["user-123"] }`; `ids` เป็น array ของ string ไม่ว่างไม่เกิน 500 รายการ สำเร็จ `200` คืนเฉพาะ profile ที่พบในรูป `{ "id", "name", "email" }` โดยไม่คืน subjects; token หาย/ผิดตอบ `401`, body ไม่ถูกต้องตอบ `400`. Membership เรียกหลังยืนยันแล้วว่าผู้เรียกเป็นเจ้าของกลุ่ม เพื่อแสดงข้อมูลผู้ขอให้เจ้าของกลุ่มเท่านั้น
 
+### `POST /internal/users/display-names` — สำหรับ Membership Service เท่านั้น
+
+ใช้ `X-Service-Token` ค่าเดียวกับ `PROFILE_SERVICE_TOKEN`; Request `{ "ids": ["user-123"] }`; รับ ID ได้ไม่เกิน 500 รายการและต้องเป็น string ไม่ว่าง; สำเร็จ `200` คืนเฉพาะ `{ "id", "name" }` โดยไม่คืนอีเมลหรือวิชาที่สนใจ; token หาย/ผิดตอบ `401`, body ไม่ถูกต้องตอบ `400`. Membership ใช้หลังอ่านสมาชิกจาก Group Service เพื่อประกอบรายชื่อสมาชิกในกลุ่ม
+
 ### `GET /api/users/:id`
 
 ต้องมี Bearer token และ `:id` ต้องตรงกับ `userId` ใน token; สำเร็จ `200`:
@@ -123,27 +127,28 @@ Membership Service เก็บคำขอในไฟล์ JSON ของต�
 
 - `POST /api/requests`: body `{ "groupId": "group-123" }`; สร้างคำขอ `pending` โดยใช้ userId จาก token; สำเร็จ `201` คืน request; คำขอที่ยัง `pending` ซ้ำตอบ `409`; ส่งคำขอใหม่ได้หลังคำขอก่อนหน้าถูกปฏิเสธ; กลุ่มไม่มีตอบ `404`; กลุ่มเต็มตอบ `422`
 - `GET /api/requests?groupId=group-123`: เจ้าของกลุ่มเท่านั้นดูรายการคำขอได้; สำเร็จ `200` คืน array โดยแต่ละรายการเพิ่ม `requesterName` และ `requesterEmail` จาก Profile Service
+- `GET /api/groups/:id/members`: ต้องมี Bearer token; คืนสมาชิกปัจจุบันตามลำดับในกลุ่มเป็น `{ "name", "isOwner" }`; ใช้แสดงชื่อและป้ายเจ้าของกลุ่ม โดยไม่ส่ง email หรือ user ID ให้ frontend; กลุ่มไม่มีตอบ `404`, Profile Service ใช้งานไม่ได้ตอบ `503`
 - `DELETE /api/groups/:id`: เจ้าของกลุ่มเท่านั้นลบกลุ่มได้ผ่าน Membership Service; ต้องไม่มีสมาชิกอื่นนอกจากเจ้าของและไม่มีคำขอที่ยัง pending; สำเร็จ `204`, เงื่อนไขไม่ครบตอบ `409`; Membership ประสาน Group Service ผ่าน `DELETE /internal/groups/:id` และ service token
 - `DELETE /api/groups/:id/leave`: สมาชิกที่ไม่ใช่เจ้าของออกจากกลุ่มได้; สำเร็จ `204`; ผู้ที่ไม่ได้เป็นสมาชิกตอบ `409`; เจ้าของต้องลบกลุ่มแทน
 - `DELETE /api/groups/:id/members/:memberId`: เจ้าของกลุ่มนำสมาชิกคนอื่นออกได้; สำเร็จ `204`; ผู้ที่ไม่ใช่เจ้าของตอบ `403`; นำเจ้าของออกไม่ได้; สมาชิกที่ถูกนำออกส่งคำขอเข้าร่วมใหม่ได้
 - `POST /api/requests/:id/approve`: เจ้าของกลุ่มอนุมัติ; ก่อนบันทึกสถานะต้องเรียก `POST /internal/groups/:id/members`; เพิ่มสมาชิกสำเร็จแล้วจึงเปลี่ยนสถานะเป็น `approved`; คำขอที่ตัดสินแล้วตอบ `409`
 - `POST /api/requests/:id/reject`: เจ้าของกลุ่มปฏิเสธ; สำเร็จคืน request สถานะ `rejected`; ผู้ไม่มีสิทธิ์ตอบ `403`; request/group ไม่มีตอบ `404`
 
-หลังอนุมัติหรือปฏิเสธ ให้ส่ง event ไป Notification Service; การแจ้งเตือนล้มเหลวต้องถูกบันทึกและลองซ้ำได้ โดยไม่ทำให้การอนุมัติถูกดำเนินซ้ำหรือเพิ่มสมาชิกซ้ำ
+เมื่อมีคำขอใหม่ ให้ Membership ส่งแจ้งเตือนไปยังเจ้าของกลุ่ม เพื่อให้เปิดรายการและพิจารณาคำขอได้ทันที; หลังอนุมัติหรือปฏิเสธ ให้แจ้งผลไปยังผู้ขอด้วย การแจ้งเตือนที่ส่งไม่สำเร็จต้องถูกบันทึกและลองซ้ำได้ โดยไม่ทำให้การอนุมัติถูกดำเนินซ้ำหรือเพิ่มสมาชิกซ้ำ
 
 ## 7. Notification Service
 
 Notification Service เก็บรายการแจ้งเตือนในไฟล์ JSON ของตนเองตาม `NOTIFICATION_DATA_FILE`; Membership ส่ง event ผ่าน API ภายใน ไม่เขียนไฟล์ของ Notification โดยตรง
 
-- `POST /internal/notifications`: Membership Service เรียกด้วย `X-Service-Token`; body `{ "userId": "user-123", "type": "request_approved", "message": "คำขอเข้ากลุ่มได้รับอนุมัติ", "relatedId": "request-123" }`; สำเร็จ `201` คืน notification
+- `POST /internal/notifications`: Membership Service เรียกด้วย `X-Service-Token`; body สำหรับแจ้งเจ้าของกลุ่มเมื่อมีคำขอใหม่ `{ "userId": "owner-123", "type": "request_received", "message": "มีคำขอเข้าร่วมกลุ่ม …", "relatedId": "request-123", "groupId": "group-123" }`; body สำหรับแจ้งผลผู้ขอใช้ `request_approved` หรือ `request_rejected` และไม่ต้องมี `groupId`; สำเร็จ `201` คืน notification
 - `GET /api/notifications?limit=20&offset=0`: ต้องมี Bearer token; คืนหน้ารายการเฉพาะ userId ใน token เรียงใหม่ไปเก่า; limit ค่าเริ่มต้น 20 (รับ 1–100), offset ค่าเริ่มต้น 0; response `{ "items": [], "unreadCount": 0, "hasMore": false, "nextOffset": null }`; `unreadCount` นับรายการยังไม่อ่านทั้งหมดของผู้ใช้
 - `PATCH /api/notifications/:id/read`: ทำเครื่องหมายอ่านแล้วได้เฉพาะ notification ของตน; สำเร็จ `200`, ไม่มีรายการตอบ `404`, เป็นของผู้อื่นตอบ `403`
 
 รายละเอียดสำหรับเชื่อม Membership → Notification (สมาชิก 4 และ 5):
 
 - ตั้ง `NOTIFY_SERVICE_TOKEN` ค่าเดียวกันใน Membership และ Notification แล้วส่งใน `X-Service-Token`; ค่า `NOTIFY_URL` ฝั่ง Membership ชี้ Notification port 3005 ตาม environment ที่ทีมจัดให้ ห้ามส่ง service token ไป browser
-- `type` รับ `request_approved` และ `request_rejected`; `userId` คือ requester จากคำขอที่บันทึกไว้ และ `relatedId` คือ request ID ทุก field ต้องเป็น string ไม่ว่างหลัง trim และ `message` ไม่เกิน 2,000 ตัวอักษร; ข้อมูลผิดตอบ `400`, internal token หาย/ผิดตอบ `401`
-- Notification object มี `{ id, userId, type, message, relatedId, read, createdAt, readAt }`; สร้างใหม่มี `read: false`, `readAt: null`; เวลาเป็น ISO 8601 UTC เมื่อ mark-read มี `read: true` และ `readAt` เป็นเวลาที่อ่านครั้งแรก การ mark ซ้ำคืนรายการเดิมด้วย `200`
+- `type` รับ `request_received`, `request_approved` และ `request_rejected`; สำหรับ `request_received`, `userId` คือเจ้าของกลุ่มและ `groupId` คือกลุ่มที่มีคำขอใหม่; สำหรับผลการพิจารณา `userId` คือ requester; `relatedId` คือ request ID ทุก field ที่ส่งต้องเป็น string ไม่ว่างหลัง trim และ `message` ไม่เกิน 2,000 ตัวอักษร; ข้อมูลผิดตอบ `400`, internal token หาย/ผิดตอบ `401`
+- Notification object มี `{ id, userId, type, message, relatedId, groupId?, read, createdAt, readAt }`; `groupId` มีเฉพาะ event `request_received` เพื่อให้หน้าเว็บพาเจ้าของกลุ่มไปยังรายการคำขอของกลุ่มนั้น; สร้างใหม่มี `read: false`, `readAt: null`; เวลาเป็น ISO 8601 UTC เมื่อ mark-read มี `read: true` และ `readAt` เป็นเวลาที่อ่านครั้งแรก การ mark ซ้ำคืนรายการเดิมด้วย `200`
 - เพื่อรองรับ retry โดยไม่แจ้งซ้ำ ใช้ `(userId, relatedId, type)` เป็น event key: ครั้งแรกตอบ `201`; ส่ง payload เดิมซ้ำตอบ `200` พร้อม notification เดิมและคง read state; key เดิมแต่ message ต่างตอบ `409` โดยไม่เขียนทับ Membership ต้องถือทั้ง `200` และ `201` ว่าส่งสำเร็จ
 - Membership ต้องบันทึก event ที่ยังส่งไม่สำเร็จเพื่อ retry payload เดิมภายหลัง โดยไม่ตัดสินคำขอหรือเพิ่มสมาชิกซ้ำ; Notification เก็บเฉพาะ JSON ของตนผ่าน `NOTIFICATION_DATA_FILE` และ Docker volume แยก ใช้หนึ่ง process/replica ต่อไฟล์
 - `GET /api/notifications` คืนเฉพาะ userId ใน token เสมอ ไม่รับ userId จาก query; การพยายามดูของผู้อื่นด้วย query จึงไม่เปิดเผยรายการนั้น ส่วนการ mark รายการของผู้อื่นตอบ `403` ตามเดิม

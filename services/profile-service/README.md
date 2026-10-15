@@ -22,7 +22,8 @@ All `/api` routes require `Authorization: Bearer <token>`. Profile GET/PUT only 
 | --- | --- | --- |
 | GET | `/health` | Liveness check |
 | POST | `/internal/users` | Provision a profile from Auth; requires `X-Service-Token` and `{ "id": "user-123", "name": "Aun", "email": "student@example.com" }` |
-| POST | `/internal/users/lookup` | Membership only; requires `X-Service-Token` and `{ "ids": ["user-123"] }`; returns only matching `{ id, name, email }` profiles (no subjects) |
+| POST | `/internal/users/lookup` | Membership only; requires `X-Service-Token` and `{ "ids": ["user-123"] }`; returns only matching `{ id, name, email }` profiles (no subjects) for owner-only request details |
+| POST | `/internal/users/display-names` | Membership only; requires `X-Service-Token`; resolves group member IDs to `{ id, name }` only, without email or subjects |
 | GET | `/api/users/:id` | Read own profile and subjects; 404 if absent |
 | PUT | `/api/users/:id` | Replace own subject list, e.g. `{ "subjects": ["Biology", "Calculus"] }` |
 | GET | `/api/users/search?subject=Biology` | Find profiles interested in a subject; returns `[]` when none match |

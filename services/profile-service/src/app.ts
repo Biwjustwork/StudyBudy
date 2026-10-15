@@ -51,6 +51,23 @@ export function createApp(store: ProfileStore, tokenSecret: string, profileServi
     return response.json(profiles);
   });
 
+  app.post("/internal/users/display-names", (request, response) => {
+    if (request.header("x-service-token") !== profileServiceToken) {
+      return response.status(401).json({ error: "unauthorized", message: "Service token is missing or invalid" });
+    }
+    const ids = request.body?.ids;
+    if (!Array.isArray(ids) || ids.length > 500
+      || ids.some((id: unknown) => typeof id !== "string" || id.trim().length === 0)) {
+      return response.status(400).json({ error: "validation_error", message: "ids must be an array of at most 500 non-empty strings" });
+    }
+    const profiles = [...new Set((ids as string[]).map((id) => id.trim()))]
+      .flatMap((id) => {
+        const profile = store.get(id);
+        return profile ? [{ id: profile.id, name: profile.name }] : [];
+      });
+    return response.json(profiles);
+  });
+
   app.use("/api", (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
     const authorization = request.header("authorization");
     const match = authorization?.match(/^Bearer\s+(.+)$/i);

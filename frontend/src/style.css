@@ -1288,6 +1288,14 @@ body{background:#f5faff}.app-shell{color:#173b60}.brand-mark{background:#1769aa;
 .group-card-footer{border-color:#e2edf5}
 .session-index{border-right:1px solid #e0edf6;border-radius:0;padding-right:20px}
 @media(max-width:760px){.filter-panel{padding:13px;border-radius:14px}.group-card,.group-card:last-child{padding:17px 14px;margin-bottom:10px;border-radius:16px}.session-index{padding-right:12px}}
+
+.group-members-panel{grid-column:1/-1;padding:14px 18px;border:1px solid #d9e9f5;border-radius:14px;background:#f5faff}
+.group-members-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:8px;margin:0;padding:0;list-style:none}
+.group-members-list li{display:flex;align-items:center;gap:9px;min-width:0;padding:8px 10px;border:1px solid #e1edf6;border-radius:11px;background:#fff;color:#28577b;font-size:12px}
+.group-members-list li>span:nth-child(2){overflow-wrap:anywhere}
+.member-avatar{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:50%;background:#e4f3ff;color:#287db5;font-weight:700}
+.group-members-loading,.group-members-error{margin:0;color:#617b90;font-size:12px}
+.group-members-error{color:#a34c4c}
 @media(max-width:400px){.session-index{border:0;padding:0}}
 /* Profile page hierarchy: personal details, subjects, and classmates. */
 .profile-page-intro{margin:2px 0 25px;padding:0 0 20px;border-bottom:1px solid #d8e9f5}
@@ -1363,3 +1371,24 @@ body{background:#f5faff}.app-shell{color:#173b60}.brand-mark{background:#1769aa;
 #content-profile .subjects-entry{flex:1 1 180px;width:auto!important;min-width:155px!important;height:40px;min-height:0!important;padding:8px 10px!important;border:0!important;outline:0;background:transparent!important;box-shadow:none!important;font:inherit;font-size:13px}
 .subjects-entry-hint{padding-left:3px;color:#7890a1;font-size:11px}
 @media(max-width:420px){.subjects-picker{padding:9px;gap:6px}.subject-chip{font-size:12px}.subject-chip button{width:20px;height:20px}#content-profile .subjects-entry{min-width:130px!important}}
+
+/* Make the group member list action stand out while keeping the blue-white theme. */
+.group-card-footer [data-action="view-members"]{
+  border:1px solid #4e9bd0;
+  background:linear-gradient(135deg,#63b7e8 0%,#2788c8 52%,#176eae 100%);
+  color:#fff;
+  box-shadow:0 3px 9px #247eb52b;
+  transition:transform .16s ease,box-shadow .16s ease,filter .16s ease;
+}
+.group-card-footer [data-action="view-members"]:hover{
+  filter:saturate(1.08) brightness(.97);
+  box-shadow:0 5px 13px #247eb540;
+}
+.group-card-footer [data-action="view-members"]:focus-visible{
+  outline:3px solid #8bc9eb;
+  outline-offset:2px;
+}
+.noti-badge-type.received{background:#dff1ff;color:#176da6}
+.noti-open-requests-btn{align-self:flex-start;margin-top:4px;padding:6px 10px;border:1px solid #78b6df;border-radius:9px;background:linear-gradient(135deg,#74c5ef,#2888c7);color:#fff;font:inherit;font-size:11px;font-weight:700;cursor:pointer;transition:filter .15s,transform .15s}
+.noti-open-requests-btn:hover{filter:brightness(.96);transform:translateY(-1px)}
+.noti-open-requests-btn:focus-visible{outline:3px solid #9bd5f5;outline-offset:2px}

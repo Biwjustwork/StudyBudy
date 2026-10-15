@@ -45,6 +45,27 @@ test("GET profile returns the authenticated user's profile", async () => {
   });
 });
 
+test("internal display-name lookup returns names only for requested profiles", async () => {
+  const response = await fetch(`${baseUrl}/internal/users/display-names`, {
+    method: "POST", headers: { "X-Service-Token": serviceToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: ["user-1", "user-2", "missing", "user-1"] }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), [{ id: "user-1", name: "กิต" }, { id: "user-2", name: "เมย์" }]);
+});
+
+test("internal display-name lookup rejects missing service token and invalid ids", async () => {
+  const missingToken = await fetch(`${baseUrl}/internal/users/display-names`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: ["user-1"] }),
+  });
+  assert.equal(missingToken.status, 401);
+  const invalidIds = await fetch(`${baseUrl}/internal/users/display-names`, {
+    method: "POST", headers: { "X-Service-Token": serviceToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: [" "] }),
+  });
+  assert.equal(invalidIds.status, 400);
+});
+
 test("GET profile returns 404 for an unknown user", async () => {
   const response = await fetch(`${baseUrl}/api/users/user-1-missing`, { headers: { Authorization: `Bearer ${token}` } });
   assert.equal(response.status, 403, "a different ID is forbidden before lookup");

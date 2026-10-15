@@ -1,5 +1,7 @@
 export type GroupSnapshot = {
   id: string;
+  subject?: string;
+  topic?: string;
   ownerId: string;
   members: string[];
   maxMembers: number;
@@ -117,6 +119,8 @@ function isGroupSnapshot(value: unknown): value is GroupSnapshot {
   const group = value as Partial<GroupSnapshot>;
   return typeof group.id === "string"
     && typeof group.ownerId === "string"
+    && (group.subject === undefined || typeof group.subject === "string")
+    && (group.topic === undefined || typeof group.topic === "string")
     && Array.isArray(group.members) && group.members.every((member) => typeof member === "string")
     && Number.isInteger(group.maxMembers)
     && typeof group.isOpen === "boolean";

@@ -10,6 +10,7 @@ import { createApp } from "./app.js";
 import { type GroupClient, type GroupSnapshot, GroupServiceError, HttpGroupClient } from "./group-client.js";
 import { retryPendingNotifications } from "./notification-delivery.js";
 import { type NotificationClient, type NotificationEvent, NotificationServiceError, HttpNotificationClient } from "./notification-client.js";
+import type { ProfileClient } from "./profile-client.js";
 import { RequestStore, type MembershipRequest } from "./request-store.js";
 
 const secret = "membership-test-secret-with-more-than-32-characters";
@@ -20,6 +21,7 @@ let baseUrl: string;
 let store: RequestStore;
 let groups: FakeGroupClient;
 let notifications: FakeNotificationClient;
+let profiles: ProfileClient;
 const ownerToken = jwt.sign({ userId: "owner-1" }, secret, { algorithm: "HS256", expiresIn: "5m" });
 const requesterToken = jwt.sign({ userId: "student-1" }, secret, { algorithm: "HS256", expiresIn: "5m" });
 const otherToken = jwt.sign({ userId: "student-2" }, secret, { algorithm: "HS256", expiresIn: "5m" });
@@ -28,6 +30,8 @@ const tokenWithoutExpiry = jwt.sign({ userId: "student-3" }, secret, { algorithm
 class FakeGroupClient implements GroupClient {
   group: GroupSnapshot = {
     id: "group-1",
+    subject: "Math",
+    topic: "Calculus",
     ownerId: "owner-1",
     members: ["owner-1"],
     maxMembers: 3,
@@ -91,7 +95,11 @@ beforeEach(async () => {
   store = await RequestStore.open(join(directory, "requests.json"));
   groups = new FakeGroupClient();
   notifications = new FakeNotificationClient();
-  server = createApp(store, secret, groups, notifications).listen(0);
+  profiles = {
+    getProfiles: async (ids) => ids.map((id) => ({ id, name: id === "owner-1" ? "เจ้าของกลุ่ม" : "สมาชิกกลุ่ม", email: `${id}@example.test` })),
+    getDisplayNames: async (ids) => ids.map((id) => ({ id, name: id === "owner-1" ? "เจ้าของกลุ่ม" : "สมาชิกกลุ่ม" })),
+  };
+  server = createApp(store, secret, groups, notifications, profiles).listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -120,10 +128,28 @@ test("health is public and API requires a valid bearer token", async () => {
   assert.equal(expiredResponse.status, 401);
 });
 
+test("group member list returns display names and owner badge without exposing IDs or email", async () => {
+  groups.group.members = ["owner-1", "student-1"];
+  const response = await fetch(`${baseUrl}/api/groups/group-1/members`, { headers: headers(otherToken) });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), [
+    { name: "เจ้าของกลุ่ม", isOwner: true },
+    { name: "สมาชิกกลุ่ม", isOwner: false },
+  ]);
+});
+
 test("request creation validates group, rejects full groups and prevents duplicates", async () => {
   const first = await createRequest();
   assert.equal(first.status, "pending");
   assert.equal(first.requesterId, "student-1");
+  assert.equal(first.notificationStatus, "sent");
+  assert.deepEqual(notifications.events[0], {
+    userId: "owner-1",
+    type: "request_received",
+    message: "มีคำขอเข้าร่วมกลุ่ม “Math · Calculus” จาก สมาชิกกลุ่ม",
+    groupId: "group-1",
+    relatedId: first.id,
+  });
 
   const duplicate = await fetch(`${baseUrl}/api/requests`, {
     method: "POST",
@@ -181,12 +207,21 @@ test("approval atomically adds one member, then records approved; repeat is reje
   assert.equal(result.notificationStatus, "sent");
   assert.deepEqual(groups.group.members, ["owner-1", "student-1"]);
   assert.equal(groups.addMemberCalls, 1);
-  assert.deepEqual(notifications.events, [{
-    userId: "student-1",
-    type: "request_approved",
-    message: "คำขอเข้ากลุ่มได้รับอนุมัติ",
-    relatedId: created.id,
-  }]);
+  assert.deepEqual(notifications.events, [
+    {
+      userId: "owner-1",
+      type: "request_received",
+      message: "มีคำขอเข้าร่วมกลุ่ม “Math · Calculus” จาก สมาชิกกลุ่ม",
+      groupId: "group-1",
+      relatedId: created.id,
+    },
+    {
+      userId: "student-1",
+      type: "request_approved",
+      message: "คำขอเข้ากลุ่มได้รับอนุมัติ",
+      relatedId: created.id,
+    },
+  ]);
 
   const repeated = await fetch(url, { method: "POST", headers: headers(ownerToken) });
   assert.equal(repeated.status, 409);
@@ -220,7 +255,7 @@ test("reject changes status once without reserving a group seat", async () => {
   assert.equal(result.status, "rejected");
   assert.equal(result.notificationStatus, "sent");
   assert.equal(groups.addMemberCalls, 0);
-  assert.equal(notifications.events[0]?.type, "request_rejected");
+  assert.equal(notifications.events[1]?.type, "request_rejected");
 
   const repeated = await fetch(url, { method: "POST", headers: headers(ownerToken) });
   assert.equal(repeated.status, 409);
@@ -316,8 +351,8 @@ test("Notification failure is recorded and retry reuses the idempotent event", a
   assert.equal(reopenedStore.pendingNotifications()[0]?.notificationEvent?.message, "คำขอเข้ากลุ่มถูกปฏิเสธ");
   await retryPendingNotifications(reopenedStore, notifications);
   assert.equal(reopenedStore.get(created.id)?.notificationStatus, "sent");
-  assert.equal(notifications.events.length, 2);
-  assert.deepEqual(notifications.events[0], notifications.events[1]);
+  assert.equal(notifications.events.length, 3);
+  assert.deepEqual(notifications.events[1], notifications.events[2]);
 });
 
 test("HTTP Group client follows the internal service-token contract", async () => {

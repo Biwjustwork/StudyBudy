@@ -66,7 +66,7 @@ JWT ต้องเป็น HS256 มี `userId` string ที่ไม่ว�
 }
 ```
 
-`type` รับ `request_approved` หรือ `request_rejected`. ทุก field ต้องเป็น string ไม่ว่างหลัง trim; message ไม่เกิน 2,000 ตัวอักษร. Response:
+`type` รับ `request_received`, `request_approved` หรือ `request_rejected`. Event `request_received` ต้องมี `groupId` และผู้รับ (`userId`) คือเจ้าของกลุ่ม; event ผลพิจารณาส่งถึง requester และไม่ต้องมี `groupId`. ทุก field ที่ส่งต้องเป็น string ไม่ว่างหลัง trim; message ไม่เกิน 2,000 ตัวอักษร. Response:
 
 ```json
 {

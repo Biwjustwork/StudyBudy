@@ -11,6 +11,7 @@
 - เพิ่ม README, `.env.example` และ Dockerfile เบื้องต้น
 - เพิ่ม API tests ครอบคลุมการอ่าน/บันทึก/ค้นหา, validation, สิทธิ์ และ token ใน `src/app.test.ts`
 - เพิ่ม `POST /internal/users` สำหรับ Auth พร้อมตรวจ `X-Service-Token`, สร้างโปรไฟล์ครั้งแรก, retry แบบ idempotent และตอบ conflict เมื่อข้อมูลขัดกัน
+- เพิ่ม `POST /internal/users/display-names` ให้ Membership resolve รหัสสมาชิกเป็นชื่อที่แสดง โดย response ไม่รวมอีเมลหรือวิชาที่สนใจ
 - บังคับ JWT เป็น HS256 มี `userId` ที่ไม่ว่างและ `exp` ที่ยังไม่หมดอายุ; เพิ่ม JSON 404 สำหรับ route ที่ไม่มี
 - ปรับ JSON store ให้เปลี่ยน memory หลังเขียนไฟล์สำเร็จเท่านั้น และ queue กลับมาทำงานได้หลังเขียนล้มเหลว
 - เพิ่ม tests สำหรับ internal user validation, JWT ไม่มี/หมด `exp`, 404 JSON และเขียนไฟล์ล้มเหลวแล้วลองใหม่
