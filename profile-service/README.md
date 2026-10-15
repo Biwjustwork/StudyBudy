@@ -6,7 +6,7 @@ Profile API owned by member 2. It stores each user's basic profile and subject i
 
 ```powershell
 Copy-Item .env.example .env
-npm install
+npm ci
 npm run dev
 ```
 
@@ -35,3 +35,13 @@ npm run build
 npm test
 docker build -t study-buddy-profile:local .
 ```
+
+## GitHub Actions CI
+
+The workflow in [profile-service.yml](../.github/workflows/profile-service.yml) runs on pushes and pull requests that change `profile-service/**` or the workflow itself. You can also run **Profile Service CI** manually from the repository's **Actions** tab once the workflow is on the default branch.
+
+Using Node.js 22, it runs `npm ci` → `npm run typecheck` → `npm run build` → `npm test` → `docker build`. A failed step stops the remaining steps. Dependencies are installed from the committed `package-lock.json`, with npm downloads cached between runs. Docker builds use the same lockfile.
+
+No GitHub Secrets are required: tests use temporary fixtures and a test-only JWT secret. The workflow builds a local image named `study-buddy-profile:ci` on the runner; it does not publish an image or deploy the service. Keep `.github/workflows` at the repository root so GitHub can discover it.
+
+Action configuration references: [checkout](https://github.com/actions/checkout) and [setup-node](https://github.com/actions/setup-node).

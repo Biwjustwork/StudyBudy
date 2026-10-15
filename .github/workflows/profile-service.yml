@@ -1,0 +1,55 @@
+name: Profile Service CI
+
+on:
+  push:
+    paths:
+      - 'profile-service/**'
+      - '.github/workflows/profile-service.yml'
+  pull_request:
+    paths:
+      - 'profile-service/**'
+      - '.github/workflows/profile-service.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: profile-service-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, build, test, and Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: profile-service
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: profile-service/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check TypeScript types
+        run: npm run typecheck
+
+      - name: Build service
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Docker image
+        run: docker build --tag study-buddy-profile:ci .
