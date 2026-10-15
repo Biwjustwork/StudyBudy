@@ -23,7 +23,7 @@ export class HttpGroupClient implements GroupClient {
 
   constructor(baseUrl: string, private readonly serviceToken: string) {
     if (!baseUrl.trim()) throw new Error("GROUP_URL must be set");
-    if (!serviceToken.trim()) throw new Error("GROUP_SERVICE_TOKEN must be set");
+    if (!serviceToken.trim()) throw new Error("SERVICE_TOKEN must be set");
     const parsed = new URL(baseUrl);
     this.baseUrl = parsed.toString().replace(/\/+$/, "");
   }

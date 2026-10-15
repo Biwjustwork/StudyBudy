@@ -62,7 +62,7 @@ Pipeline ที่เสนอ: Pull Request → type check/build/unit test → 
 
 ## **สมาชิก 1 — Project Manager และ Auth Service**
 
-* จัดโครงสร้าง repository กลางให้มีโฟลเดอร์ `services/auth-service/`, `services/profile-service/`, `services/group-service/`, `membership-service/` และ `notification-service/`; ใช้ port 3001–3005 ตามลำดับ และเก็บ `API_CONTRACT.md`, `TEST_SPEC.md` กับ GitHub Actions workflow ไว้ส่วนกลาง ไม่ต้องคัดลอกเอกสารหรือ workflow ไปยัง repository แยก
+* จัดโครงสร้าง repository กลางให้มีโฟลเดอร์ `services/auth-service/`, `services/profile-service/`, `services/group-service/`, `services/membership-service/` และ `services/notification-service/`; ใช้ port 3001–3005 ตามลำดับ และเก็บ `API_CONTRACT.md`, `TEST_SPEC.md` กับ GitHub Actions workflow ไว้ส่วนกลาง ไม่ต้องคัดลอกเอกสารหรือ workflow ไปยัง repository แยก
 * จัดทำ Test Specification อย่างน้อย 5 กรณี โดยแต่ละกรณีระบุ Test ID, requirement, precondition, test data, ขั้นตอน, expected result และผู้รับผิดชอบ เช่น login ถูก/ผิด, ข้อมูลสร้างกลุ่มไม่ครบ, ค้นหาเฉพาะกลุ่มที่เปิดรับ, ขอเข้ากลุ่มซ้ำ และกลุ่มเต็ม; เพิ่มการตรวจว่าข้อมูล JSON อยู่ต่อเมื่อ service restart โดยใช้ volume
 * ดูแล GitHub Actions workflow กลางให้ตรวจ service ที่ได้รับผลกระทบเมื่อเปิด Pull Request โดยรัน install → typecheck → build → unit test และ Docker build ตามความเหมาะสม; เก็บ credentials สำหรับ push image ใน GitHub Secrets
 * พัฒนา Auth Service และหน้า Login/Register: `POST /api/register` รับ email, name และ password โดยใช้ email เป็น username ตรวจรูปแบบอีเมล/บัญชีซ้ำและเงื่อนไขรหัสผ่าน พร้อมเก็บ password hash ด้วย bcrypt ในไฟล์ JSON ของ Auth; `POST /api/login` คืน userId และ token เมื่อสำเร็จ; `GET /api/me` ตรวจ token

@@ -3,7 +3,7 @@
 ## สิ่งที่ส่งมอบวันนี้
 
 - Notification API, หน้าแจ้งเตือน, JSON store, API/unit tests, Dockerfile และ CI เฉพาะ service.
-- โฟลเดอร์ `notification-service/` อยู่ root ตาม Profile/Group/Membership branches; workflow อยู่ `.github/workflows/notification-service.yml`.
+- โฟลเดอร์ `services/notification-service/` อยู่ในโฟลเดอร์ services เดียวกับ Profile/Group/Membership; workflow อยู่ `.github/workflows/notification-service.yml`.
 - `API_CONTRACT.md` กลางส่วน 7 เพิ่มรายละเอียด internal token, response fields และ retry; ตอนรวม branch ให้คงการปรับ JSON storage เดิมของ Auth ไว้.
 - การประกอบชุดรันรวม, E2E ทุก service และ Docker Hub release เป็นขั้นตอนของทีมหลังรวมโค้ด.
 
@@ -42,7 +42,7 @@ Notification deduplicate ด้วย `(userId, relatedId, type)` และไ�
 
 ## สำหรับทีมรวมโค้ด / PM
 
-1. รวม `notification-service/`, workflow และส่วน 7 ของ contract; ตรวจ path ของ workflows หลังจัดโครงสร้าง repo.
+1. รวม `services/notification-service/`, workflow และส่วน 7 ของ contract; ตรวจ path ของ workflows หลังจัดโครงสร้าง repo.
 2. ส่ง env ตาม `.env.example`, mount volume แยกเข้าที่ `/app/data` และรันเพียงหนึ่ง replica.
 3. เปิด `/health` และ `/notifications.html`; เชื่อม `NOTIFY_URL` จาก Membership.
 4. รวมงานแล้วรัน E2E สมัคร→ตั้งวิชา→สร้างกลุ่ม→ขอเข้าร่วม→ตัดสิน→ผู้ขออ่านแจ้งเตือน.

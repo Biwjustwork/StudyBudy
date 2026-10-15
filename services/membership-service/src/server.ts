@@ -10,7 +10,7 @@ const port = Number(process.env.PORT ?? 3004);
 const tokenSecret = process.env.AUTH_TOKEN_SECRET;
 if (!tokenSecret || tokenSecret.length < 32) throw new Error("AUTH_TOKEN_SECRET must be set and at least 32 characters long");
 
-const groupClient = new HttpGroupClient(process.env.GROUP_URL ?? "", process.env.GROUP_SERVICE_TOKEN ?? "");
+const groupClient = new HttpGroupClient(process.env.GROUP_URL ?? "", process.env.SERVICE_TOKEN ?? "");
 const notificationClient = new HttpNotificationClient(process.env.NOTIFY_URL ?? "", process.env.NOTIFY_SERVICE_TOKEN ?? "");
 const store = await RequestStore.open(resolve(process.env.MEMBERSHIP_DATA_FILE ?? "./data/requests.json"));
 createApp(store, tokenSecret, groupClient, notificationClient).listen(port, () => {

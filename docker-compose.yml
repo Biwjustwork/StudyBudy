@@ -1,0 +1,84 @@
+services:
+  auth-service:
+    build:
+      context: ./services/auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      AUTH_DATA_FILE: /app/data/users.json
+      PROFILE_URL: http://profile-service:3002
+      PROFILE_SERVICE_TOKEN: ${PROFILE_SERVICE_TOKEN:-replace-with-shared-profile-service-token}
+    volumes:
+      - auth-data:/app/data
+    depends_on:
+      profile-service:
+        condition: service_started
+
+  profile-service:
+    build:
+      context: ./services/profile-service
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      PROFILE_DATA_FILE: /app/data/profiles.json
+    volumes:
+      - profile-data:/app/data
+
+  group-service:
+    build:
+      context: ./services/group-service
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      GROUP_DATA_FILE: /app/data/groups.json
+      SERVICE_TOKEN: ${GROUP_SERVICE_TOKEN:-replace-with-shared-group-service-token}
+    volumes:
+      - group-data:/app/data
+
+  membership-service:
+    build:
+      context: ./services/membership-service
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      GROUP_URL: http://group-service:3003
+      SERVICE_TOKEN: ${GROUP_SERVICE_TOKEN:-replace-with-shared-group-service-token}
+      MEMBERSHIP_DATA_FILE: /app/data/requests.json
+      NOTIFY_URL: http://notification-service:3005
+      NOTIFY_SERVICE_TOKEN: ${NOTIFY_SERVICE_TOKEN:-replace-with-shared-notification-service-token}
+    volumes:
+      - membership-data:/app/data
+    depends_on:
+      group-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+    ports:
+      - "3005:3005"
+    environment:
+      PORT: 3005
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      NOTIFY_SERVICE_TOKEN: ${NOTIFY_SERVICE_TOKEN:-replace-with-shared-notification-service-token}
+      NOTIFICATION_DATA_FILE: /app/data/notifications.json
+    volumes:
+      - notification-data:/app/data
+
+volumes:
+  auth-data:
+  profile-data:
+  group-data:
+  membership-data:
+  notification-data:

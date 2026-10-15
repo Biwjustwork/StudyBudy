@@ -11,8 +11,8 @@
 | Auth | `services/auth-service/` | 3001 | สมัครสมาชิก เข้าสู่ระบบ และออก/ตรวจ token |
 | Profile & Subject | `services/profile-service/` | 3002 | ข้อมูลโปรไฟล์และวิชาที่สนใจ |
 | Study Group / Session | `services/group-service/` | 3003 | สร้าง ค้นหา และจัดการกลุ่มอ่าน |
-| Membership | `membership-service/` | 3004 | คำขอเข้าร่วมและการตัดสินใจของเจ้าของกลุ่ม |
-| Notification | `notification-service/` | 3005 | แจ้งสถานะคำขอและการเปลี่ยนแปลง |
+| Membership | `services/membership-service/` | 3004 | คำขอเข้าร่วมและการตัดสินใจของเจ้าของกลุ่ม |
+| Notification | `services/notification-service/` | 3005 | แจ้งสถานะคำขอและการเปลี่ยนแปลง |
 
 ทุก service มี `GET /health` สำหรับตรวจสถานะ โดยคืน `200` และ JSON ที่มี `status: "ok"` กับชื่อ service
 

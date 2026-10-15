@@ -5,7 +5,7 @@
 ## โครงสร้าง
 
 ```text
-notification-service/
+services/notification-service/
   src/app.ts                 HTTP, authentication, validation, error responses
   src/server.ts              environment และการเปิด JSON store
   src/notification-store.ts  JSON persistence, ownership และ retry deduplication
@@ -18,7 +18,7 @@ notification-service/
 
 ## เริ่มใช้งาน
 
-ต้องใช้ Node.js 22.9 ขึ้นไป คำสั่งจากโฟลเดอร์ `notification-service`:
+ต้องใช้ Node.js 22.9 ขึ้นไป คำสั่งจากโฟลเดอร์ `services/notification-service`:
 
 ```powershell
 Copy-Item .env.example .env
@@ -94,8 +94,8 @@ JSON เป็น array แยกของ service นี้เท่านั�
 จาก root ของ repo:
 
 ```powershell
-docker build -f notification-service/Dockerfile -t study-buddy-notification:local notification-service
-docker run --rm --name study-buddy-notification --env-file notification-service/.env --mount type=volume,source=study-buddy-notification-data,target=/app/data -p 3005:3005 study-buddy-notification:local
+docker build -f services/notification-service/Dockerfile -t study-buddy-notification:local services/notification-service
+docker run --rm --name study-buddy-notification --env-file services/notification-service/.env --mount type=volume,source=study-buddy-notification-data,target=/app/data -p 3005:3005 study-buddy-notification:local
 ```
 
 Image รันด้วย user `node`, มี `/health` healthcheck และ copy เฉพาะ compiled code, public files และ production dependencies. ไม่ copy `.env`, ไฟล์ข้อมูลจริง หรือ tests เข้า final image. Named volume `/app/data` เก็บ JSON ต่อได้หลังสร้าง container ใหม่. หากใช้ bind mount ต้องให้ user `node` เขียน directory นั้นได้.
