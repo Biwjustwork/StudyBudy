@@ -13,6 +13,7 @@ function isValidPassword(password) {
   }
 
   return password.length >= 8
+    && Buffer.byteLength(password, 'utf8') <= 72
     && /[A-Z]/.test(password)
     && /[\p{P}\p{S}]/u.test(password);
 }

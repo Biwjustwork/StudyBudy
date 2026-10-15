@@ -6,6 +6,7 @@
 
 - ครอบคลุม Auth, Profile & Subject, Group, Membership, Notification และ flow หลักตั้งแต่สมัคร/เข้าสู่ระบบจนได้รับการแจ้งเตือน
 - ทุก service ต้องมี unit test อย่างน้อยหนึ่งกรณีที่เจ้าของ service เป็นผู้รับผิดชอบ; เป้าหมายขั้นต่ำรวมอย่างน้อย 5 unit tests
+- แต่ละ service ต้องเก็บข้อมูลใน JSON file ของตนเอง; เมื่อตรวจ Docker ให้ mount volume แยกต่อ service และตรวจว่าข้อมูลอยู่ต่อหลัง restart
 - Test Case ด้านล่างเป็น acceptance/integration cases; ผลจริงต้องตรง expected result และไม่มี secret หรือ password แบบ plain text ใน log/response
 - Pull Request ต้องผ่าน install, typecheck, build และ unit tests ของ service ที่ได้รับผลกระทบ; การเปลี่ยน API ต้องรัน consumer/integration tests ที่เกี่ยวข้องด้วย
 - การทดสอบ release ต้อง build Docker image ของทุก service และยืนยันว่า image ถูก push ไปยัง Container Registry ตาม tag ที่กำหนดในแผน release
@@ -38,6 +39,7 @@
 | NOTI-03 | Integration | สมาชิก 5 | ผู้ใช้พยายามอ่านหรือ mark notification ของคนอื่น | ได้ `403`; ข้อมูลเจ้าของรายการไม่เปลี่ยน |
 | FLOW-01 | End-to-end | สมาชิก 5 ร่วมกับสมาชิก 1–4 | สมัคร/login → ตั้ง subjects → สร้างกลุ่ม → ส่งคำขอ → เจ้าของอนุมัติ → ผู้ขออ่าน notification | Flow จบสำเร็จ; userId, groupId, requestId และสถานะตรงกันทุก service |
 | DEPLOY-01 | CI/Release smoke | สมาชิก 5 ร่วมกับสมาชิก 1 | build image ของทุก service, push tag release แล้วเรียก `/health` จาก image ที่เผยแพร่ | ทุก image build/push สำเร็จและ service ตอบ health `200`; tag สอดคล้องกัน |
+| DATA-01 | Docker smoke | เจ้าของ service แต่ละคน | สร้างข้อมูลผ่าน API, restart container โดยใช้ volume เดิม แล้วอ่านข้อมูลเดิมอีกครั้ง | ข้อมูล JSON ยังอยู่ครบ; image ไม่มีไฟล์ข้อมูลจริงติดไปด้วย |
 
 ## 3. รูปแบบบันทึกผล
 

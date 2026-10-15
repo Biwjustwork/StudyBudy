@@ -16,6 +16,10 @@
 
 ทุก service มี `GET /health` สำหรับตรวจสถานะ โดยคืน `200` และ JSON ที่มี `status: "ok"` กับชื่อ service
 
+แต่ละ service เก็บข้อมูลของตนเองในไฟล์ JSON แยกกัน ไม่ใช้ไฟล์ร่วมกันและไม่ใช้ MongoDB ในแผนนี้: Auth ใช้ `AUTH_DATA_FILE` (ค่าเริ่มต้น `./data/users.json`), Profile ใช้ `PROFILE_DATA_FILE` (`./data/profiles.json`), Group ใช้ `GROUP_DATA_FILE` (`./data/groups.json`), Membership ใช้ `MEMBERSHIP_DATA_FILE` (`./data/requests.json`) และ Notification ใช้ `NOTIFICATION_DATA_FILE` (`./data/notifications.json`). ห้ามใส่ไฟล์ข้อมูลจริงใน image หรือ commit เข้า Git
+
+เมื่อรันด้วย Docker ให้ mount persistent volume แยกของแต่ละ service ไปยังโฟลเดอร์ที่เก็บไฟล์ข้อมูล เพื่อให้ข้อมูลอยู่ต่อเมื่อเปลี่ยน container; แผนนี้สมมติให้ service ละหนึ่ง replica เพราะไฟล์ JSON ไม่มีการล็อกข้ามหลาย container
+
 ## 2. ข้อตกลง HTTP ร่วม
 
 - API ใช้ HTTP และ JSON; URL สำหรับเรียกจาก service อื่นอ่านจาก environment variable เช่น `AUTH_URL`, `PROFILE_URL`, `GROUP_URL`, `MEMBER_URL`, `NOTIFY_URL` ห้ามฝัง URL ปลายทาง production ไว้ใน source code
@@ -37,7 +41,9 @@ Request:
 { "email": "student@example.com", "password": "StudyBuddy!1", "name": "Aun" }
 ```
 
-เงื่อนไข: email ต้องอยู่ในรูปแบบที่ถูกต้องและไม่ซ้ำ; password ยาวอย่างน้อย 8 ตัวและมีตัวพิมพ์ใหญ่กับอักขระพิเศษ; name ต้องไม่เป็นค่าว่าง; เก็บ password ด้วย bcrypt เท่านั้น
+เงื่อนไข: email ต้องอยู่ในรูปแบบที่ถูกต้องและไม่ซ้ำ; password ยาวอย่างน้อย 8 ตัวและมีตัวพิมพ์ใหญ่กับอักขระพิเศษ และต้องไม่เกิน 72 ไบต์เมื่อเข้ารหัส UTF-8; name ต้องไม่เป็นค่าว่าง; เก็บ password ด้วย bcrypt เท่านั้น
+
+ข้อจำกัด 72 ไบต์เป็นขนาดข้อมูลจริงหลังเข้ารหัส UTF-8 ไม่ใช่จำนวนตัวอักษรเสมอไป (ตัวอักษรภาษาไทยอาจใช้หลายไบต์) ระบบต้องปฏิเสธ password ที่เกินขนาดนี้ก่อน hash เพื่อไม่ให้ bcrypt มองข้ามส่วนท้ายของรหัสผ่าน ใช้ bcrypt salt rounds 12
 
 สำเร็จ `201`:
 
@@ -45,7 +51,7 @@ Request:
 { "userId": "user-123", "email": "student@example.com" }
 ```
 
-ข้อมูลไม่ผ่านตอบ `400`, email ซ้ำตอบ `409` การสร้างบัญชีต้องสร้าง profile เริ่มต้นผ่าน `POST /internal/users` ของ Profile Service ก่อนตอบสำเร็จ; หาก Profile Service ใช้งานไม่ได้ให้ตอบ `503` และห้ามทิ้งบัญชีที่ใช้ต่อไม่ได้ไว้โดยไม่มีแนวทางชดเชย
+ข้อมูลไม่ผ่านตอบ `400`, email ซ้ำตอบ `409` Auth เก็บ `userId`, email, bcrypt hash และสถานะบัญชีในไฟล์ JSON ที่กำหนดด้วย `AUTH_DATA_FILE`; ห้ามเก็บ password แบบดิบ Auth สร้าง profile เริ่มต้นผ่าน `POST /internal/users` ของ Profile Service ก่อนตอบสำเร็จ บัญชีระหว่างรอ profile มีสถานะ `pending_profile` และ login ไม่ได้; หาก Profile Service ใช้งานไม่ได้ให้ตอบ `503` โดยคงบัญชี pending ไว้เพื่อให้สมัครซ้ำด้วย email, name และ password เดิม แล้วลองสร้าง profile ด้วย `userId` เดิมอีกครั้ง เมื่อสำเร็จจึงเปลี่ยนเป็น `active`
 
 ### `POST /api/login`
 
@@ -65,9 +71,11 @@ Request: `{ "email": "student@example.com", "password": "StudyBuddy!1" }`
 
 สร้าง profile หลังสมัครสมาชิก; ตรวจ `X-Service-Token` กับ `PROFILE_SERVICE_TOKEN` จาก environment
 
+Profile Service เป็นเจ้าของข้อมูลชื่อและวิชาที่สนใจ และเก็บข้อมูลในไฟล์ JSON ของตนเองตาม `PROFILE_DATA_FILE`; Auth ส่งข้อมูลเริ่มต้นผ่าน endpoint นี้ ไม่เขียนไฟล์ของ Profile โดยตรง
+
 Request: `{ "id": "user-123", "name": "Aun", "email": "student@example.com" }`
 
-สำเร็จ `201`: `{ "id": "user-123", "name": "Aun", "email": "student@example.com", "subjects": [] }`. ID ซ้ำตอบ `409`; ไม่มีหรือ token ภายในไม่ถูกต้องตอบ `401`
+สำเร็จครั้งแรก `201`: `{ "id": "user-123", "name": "Aun", "email": "student@example.com", "subjects": [] }`. หากมี ID เดิมและ `name`/`email` ตรงกัน ให้คืน profile เดิมด้วย `200` เพื่อรองรับการ retry จาก Auth โดยไม่สร้างซ้ำ; ID เดิมแต่ข้อมูลต่างกันตอบ `409`; ไม่มีหรือ token ภายในไม่ถูกต้องตอบ `401`
 
 ### `GET /api/users/:id`
 
@@ -89,6 +97,8 @@ email แสดงเมื่อมีข้อมูลและอาจไ�
 
 ## 5. Study Group / Session Service
 
+Group Service เก็บข้อมูลกลุ่มในไฟล์ JSON ของตนเองตาม `GROUP_DATA_FILE`; Membership ต้องเรียก API ของ Group เพื่อเพิ่มสมาชิก ไม่แก้ไฟล์ของ Group โดยตรง
+
 ตัวตนของเจ้าของกลุ่มมาจาก JWT เท่านั้น
 
 - `POST /api/groups`: รับ `subject`, `topic`, `startsAt`, `maxMembers`, `location` และ `description` (ถ้ามี); สร้างกลุ่มโดยกำหนด owner จาก token; สำเร็จ `201` คืน group object
@@ -101,6 +111,8 @@ email แสดงเมื่อมีข้อมูลและอาจไ�
 
 ## 6. Membership Service
 
+Membership Service เก็บคำขอในไฟล์ JSON ของตนเองตาม `MEMBERSHIP_DATA_FILE`; ห้ามแก้ไฟล์ของ Group หรือ Notification โดยตรง
+
 ตัวตนผู้ขอและผู้ตัดสินมาจาก JWT
 
 - `POST /api/requests`: body `{ "groupId": "group-123" }`; สร้างคำขอ `pending` โดยใช้ userId จาก token; สำเร็จ `201` คืน request; คำขอซ้ำตอบ `409`; กลุ่มไม่มีตอบ `404`; กลุ่มเต็มตอบ `422`
@@ -111,6 +123,8 @@ email แสดงเมื่อมีข้อมูลและอาจไ�
 หลังอนุมัติหรือปฏิเสธ ให้ส่ง event ไป Notification Service; การแจ้งเตือนล้มเหลวต้องถูกบันทึกและลองซ้ำได้ โดยไม่ทำให้การอนุมัติถูกดำเนินซ้ำหรือเพิ่มสมาชิกซ้ำ
 
 ## 7. Notification Service
+
+Notification Service เก็บรายการแจ้งเตือนในไฟล์ JSON ของตนเองตาม `NOTIFICATION_DATA_FILE`; Membership ส่ง event ผ่าน API ภายใน ไม่เขียนไฟล์ของ Notification โดยตรง
 
 - `POST /internal/notifications`: Membership Service เรียกด้วย `X-Service-Token`; body `{ "userId": "user-123", "type": "request_approved", "message": "คำขอเข้ากลุ่มได้รับอนุมัติ", "relatedId": "request-123" }`; สำเร็จ `201` คืน notification
 - `GET /api/notifications`: ต้องมี Bearer token; คืนเฉพาะรายการของ userId ใน token เรียงใหม่ไปเก่า

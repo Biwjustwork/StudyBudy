@@ -3,6 +3,9 @@ require('dotenv').config();
 const port = Number(process.env.PORT ?? 3001);
 const authTokenSecret = process.env.AUTH_TOKEN_SECRET;
 const jwtExpiresIn = process.env.JWT_EXPIRES_IN ?? '1h';
+const authDataFile = process.env.AUTH_DATA_FILE ?? './data/users.json';
+const profileUrl = process.env.PROFILE_URL;
+const profileServiceToken = process.env.PROFILE_SERVICE_TOKEN;
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535.');
@@ -16,4 +19,7 @@ module.exports = {
   port,
   authTokenSecret,
   jwtExpiresIn,
+  authDataFile,
+  profileUrl,
+  profileServiceToken,
 };
