@@ -48,7 +48,7 @@ test("GET profile returns the authenticated user's profile", async () => {
 test("GET profile returns 404 for an unknown user", async () => {
   const response = await fetch(`${baseUrl}/api/users/user-1-missing`, { headers: { Authorization: `Bearer ${token}` } });
   assert.equal(response.status, 403, "a different ID is forbidden before lookup");
-  const missingOwnUserToken = jwt.sign({ userId: "missing" }, secret, { algorithm: "HS256" });
+  const missingOwnUserToken = jwt.sign({ userId: "missing" }, secret, { algorithm: "HS256", expiresIn: "5m" });
   const missingResponse = await fetch(`${baseUrl}/api/users/missing`, { headers: { Authorization: `Bearer ${missingOwnUserToken}` } });
   assert.equal(missingResponse.status, 404);
 });
@@ -86,6 +86,21 @@ test("protected routes reject missing and invalid tokens", async () => {
   assert.equal(missing.status, 401);
   const invalid = await fetch(`${baseUrl}/api/users/search?subject=Chemistry`, { headers: { Authorization: "Bearer invalid" } });
   assert.equal(invalid.status, 401);
+});
+
+test("JWTs without exp or with an expired exp are rejected", async () => {
+  const noExpiry = jwt.sign({ userId: "user-1" }, secret, { algorithm: "HS256", noTimestamp: true });
+  const expired = jwt.sign({ userId: "user-1" }, secret, { algorithm: "HS256", expiresIn: -10 });
+  for (const invalidToken of [noExpiry, expired]) {
+    const response = await fetch(`${baseUrl}/api/users/user-1`, { headers: { Authorization: `Bearer ${invalidToken}` } });
+    assert.equal(response.status, 401);
+  }
+});
+
+test("unknown routes return contract-shaped JSON 404 responses", async () => {
+  const response = await fetch(`${baseUrl}/missing-route`);
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found", message: "Route not found" });
 });
 
 test("PUT cannot update a different user's profile", async () => {
@@ -151,7 +166,8 @@ test("internal create rejects missing or invalid fields", async () => {
   for (const body of [
     { id: "user-3", name: "นัท" },
     { id: "user-3", name: " ", email: "nut@example.test" },
-    { id: "user-3", name: "นัท", email: 7 }
+    { id: "user-3", name: "นัท", email: 7 },
+    { id: "user-3", name: "นัท", email: "not-an-email" }
   ]) {
     const response = await fetch(`${baseUrl}/internal/users`, {
       method: "POST", headers: { "X-Service-Token": serviceToken, "Content-Type": "application/json" },
@@ -159,4 +175,20 @@ test("internal create rejects missing or invalid fields", async () => {
     });
     assert.equal(response.status, 400);
   }
+  assert.equal(profileStore.get("user-3"), undefined, "invalid profiles must not be persisted");
+});
+
+test("failed JSON writes do not change memory and a later write can succeed", async () => {
+  const filePath = join(directory, "profiles.json");
+  await rm(directory, { recursive: true, force: true });
+  await writeFile(directory, "blocks-directory-creation");
+
+  await assert.rejects(profileStore.setSubjects("user-1", ["ฟิสิกส์"]));
+  assert.deepEqual(profileStore.get("user-1")?.subjects, ["ชีววิทยา"]);
+
+  await rm(directory, { force: true });
+  await profileStore.setSubjects("user-1", ["ฟิสิกส์"]);
+  assert.deepEqual(profileStore.get("user-1")?.subjects, ["ฟิสิกส์"]);
+  const persisted = JSON.parse(await readFile(filePath, "utf8"));
+  assert.deepEqual(persisted.find((profile: { id: string }) => profile.id === "user-1").subjects, ["ฟิสิกส์"]);
 });

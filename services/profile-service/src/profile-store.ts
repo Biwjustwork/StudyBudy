@@ -30,7 +30,7 @@ export class ProfileStore {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       await mkdir(dirname(filePath), { recursive: true });
-      await store.persist();
+      await store.persist(store.profiles);
     }
     return store;
   }
@@ -41,16 +41,20 @@ export class ProfileStore {
   }
 
   async createFromAuth(input: { id: string; name: string; email: string }): Promise<CreateProfileResult> {
-    const existing = this.profiles.get(input.id);
-    if (existing) {
-      if (existing.name !== input.name || existing.email !== input.email) return { status: "conflict" };
-      return { status: "existing", profile: structuredClone(existing) };
-    }
+    return this.enqueue(async () => {
+      const existing = this.profiles.get(input.id);
+      if (existing) {
+        if (existing.name !== input.name || existing.email !== input.email) return { status: "conflict" };
+        return { status: "existing", profile: structuredClone(existing) };
+      }
 
-    const profile: Profile = { ...input, subjects: [] };
-    this.profiles.set(profile.id, profile);
-    await this.persist();
-    return { status: "created", profile: structuredClone(profile) };
+      const profile: Profile = { ...input, subjects: [] };
+      const nextProfiles = new Map(this.profiles);
+      nextProfiles.set(profile.id, profile);
+      await this.persist(nextProfiles);
+      this.profiles = nextProfiles;
+      return { status: "created", profile: structuredClone(profile) };
+    });
   }
 
   findBySubject(subject: string): Profile[] {
@@ -61,22 +65,30 @@ export class ProfileStore {
   }
 
   async setSubjects(id: string, subjects: string[]): Promise<Profile | undefined> {
-    const existing = this.profiles.get(id);
-    if (!existing) return undefined;
-    const updated = { ...existing, subjects: [...subjects] };
-    this.profiles.set(id, updated);
-    await this.persist();
-    return structuredClone(updated);
+    return this.enqueue(async () => {
+      const existing = this.profiles.get(id);
+      if (!existing) return undefined;
+      const updated = { ...existing, subjects: [...subjects] };
+      const nextProfiles = new Map(this.profiles);
+      nextProfiles.set(id, updated);
+      await this.persist(nextProfiles);
+      this.profiles = nextProfiles;
+      return structuredClone(updated);
+    });
   }
 
-  private async persist(): Promise<void> {
-    this.writeQueue = this.writeQueue.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      const temporaryPath = `${this.filePath}.tmp`;
-      await writeFile(temporaryPath, JSON.stringify([...this.profiles.values()], null, 2), "utf8");
-      await rename(temporaryPath, this.filePath);
-    });
-    return this.writeQueue;
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.writeQueue.then(operation);
+    // Keep the queue usable after a failed write while returning the original error to this caller.
+    this.writeQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private async persist(profiles: Map<string, Profile>): Promise<void> {
+    await mkdir(dirname(this.filePath), { recursive: true });
+    const temporaryPath = `${this.filePath}.tmp`;
+    await writeFile(temporaryPath, JSON.stringify([...profiles.values()], null, 2), "utf8");
+    await rename(temporaryPath, this.filePath);
   }
 }
 

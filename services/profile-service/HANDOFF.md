@@ -11,7 +11,11 @@
 - เพิ่ม README, `.env.example` และ Dockerfile เบื้องต้น
 - เพิ่ม API tests ครอบคลุมการอ่าน/บันทึก/ค้นหา, validation, สิทธิ์ และ token ใน `src/app.test.ts`
 - เพิ่ม `POST /internal/users` สำหรับ Auth พร้อมตรวจ `X-Service-Token`, สร้างโปรไฟล์ครั้งแรก, retry แบบ idempotent และตอบ conflict เมื่อข้อมูลขัดกัน
-- ติดตั้ง dependencies และตรวจผ่าน service `typecheck`, `build`, `test` (12 tests ผ่าน) และ frontend `build`
+- บังคับ JWT เป็น HS256 มี `userId` ที่ไม่ว่างและ `exp` ที่ยังไม่หมดอายุ; เพิ่ม JSON 404 สำหรับ route ที่ไม่มี
+- ปรับ JSON store ให้เปลี่ยน memory หลังเขียนไฟล์สำเร็จเท่านั้น และ queue กลับมาทำงานได้หลังเขียนล้มเหลว
+- เพิ่ม tests สำหรับ internal user validation, JWT ไม่มี/หมด `exp`, 404 JSON และเขียนไฟล์ล้มเหลวแล้วลองใหม่
+- อัปเดต README และ `.env.example`; ค่าที่แสดงเป็น placeholder เท่านั้น ห้าม commit secret จริง
+- รันผลตรวจปัจจุบันให้ครบก่อนเปิด PR: `npm run typecheck`, `npm run build`, `npm test`, `docker build --tag study-buddy-profile:local .` (รายงานผลใน PR)
 
 ## ข้อตกลงที่ยังต้องยืนยันก่อนเชื่อมบริการ
 
@@ -49,9 +53,9 @@
 
 ### กิต — สมาชิก 2
 
-- เพิ่ม/ปรับ test เมื่อ contract และ flow เชื่อมบริการได้รับการยืนยัน
-- ทดสอบ integration เพิ่มด้วยข้อมูลผู้ใช้จำลองและ token สำหรับ local แล้วแก้ปัญหาที่พบ
-- ปรับ service ตาม contract ที่ทีมยืนยันและอัปเดต README ก่อนเปิด PR
+- งานตามรายการ Profile & Subject Service ข้างต้นอยู่บน branch ของกิต; รันคำสั่งตรวจทั้งสี่รายการและแนบผลใน PR ใหม่เข้า `main`
+- เปิด PR ไว้เพื่อ review เท่านั้น ห้าม merge จนกว่าจะตรวจเสร็จ
+- ระบุใน PR ว่า Auth เรียก `POST /internal/users` พร้อม `X-Service-Token` ได้แล้ว; ห้ามใส่ token หรือ secret จริง
 
 ## วิธีเริ่ม local
 

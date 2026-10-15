@@ -10,8 +10,8 @@ export function createApp(store: ProfileStore, tokenSecret: string, profileServi
   app.use(express.json({ limit: "32kb" }));
   app.use((request, response, next) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
-    response.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
-    response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+    response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Service-Token");
     if (request.method === "OPTIONS") return response.sendStatus(204);
     next();
   });
@@ -23,8 +23,9 @@ export function createApp(store: ProfileStore, tokenSecret: string, profileServi
       return response.status(401).json({ error: "unauthorized", message: "Service token is missing or invalid" });
     }
     const { id, name, email } = request.body ?? {};
-    if ([id, name, email].some((value) => typeof value !== "string" || value.trim().length === 0)) {
-      return response.status(400).json({ error: "validation_error", message: "id, name, and email must be non-empty strings" });
+    if ([id, name, email].some((value) => typeof value !== "string" || value.trim().length === 0)
+      || !/^\S+@\S+\.\S+$/.test(email.trim())) {
+      return response.status(400).json({ error: "validation_error", message: "id and name must be non-empty strings and email must be valid" });
     }
     const result = await store.createFromAuth({ id: id.trim(), name: name.trim(), email: email.trim() });
     if (result.status === "conflict") {
@@ -39,8 +40,9 @@ export function createApp(store: ProfileStore, tokenSecret: string, profileServi
     if (!match) return response.status(401).json({ error: "unauthorized", message: "Bearer token is required" });
     try {
       const payload = jwt.verify(match[1], tokenSecret, { algorithms: ["HS256"] }) as JwtPayload;
-      if (typeof payload.userId !== "string" || payload.userId.length === 0) {
-        return response.status(401).json({ error: "unauthorized", message: "Token does not contain a userId" });
+      if (typeof payload.userId !== "string" || payload.userId.trim().length === 0
+        || typeof payload.exp !== "number" || payload.exp <= Math.floor(Date.now() / 1000)) {
+        return response.status(401).json({ error: "unauthorized", message: "Token must contain a non-empty userId and an unexpired exp" });
       }
       request.userId = payload.userId;
       next();
@@ -74,6 +76,10 @@ export function createApp(store: ProfileStore, tokenSecret: string, profileServi
     const profile = await store.setSubjects(request.params.id, subjects.value);
     if (!profile) return response.status(404).json({ error: "not_found", message: "User not found" });
     return response.json(profile);
+  });
+
+  app.use((_request, response) => {
+    return response.status(404).json({ error: "not_found", message: "Route not found" });
   });
 
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
