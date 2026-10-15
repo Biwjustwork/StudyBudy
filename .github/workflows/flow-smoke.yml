@@ -1,0 +1,91 @@
+name: Cross-service Flow Smoke Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/auth-service/**'
+      - 'services/profile-service/**'
+      - 'services/group-service/**'
+      - 'services/membership-service/**'
+      - 'services/notification-service/**'
+      - 'tests/flow-smoke.mjs'
+      - 'docker-compose.yml'
+      - 'API_CONTRACT.md'
+      - 'TEST_SPEC.md'
+      - '.github/workflows/flow-smoke.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/auth-service/**'
+      - 'services/profile-service/**'
+      - 'services/group-service/**'
+      - 'services/membership-service/**'
+      - 'services/notification-service/**'
+      - 'tests/flow-smoke.mjs'
+      - 'docker-compose.yml'
+      - 'API_CONTRACT.md'
+      - 'TEST_SPEC.md'
+      - '.github/workflows/flow-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flow-smoke-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flow:
+    name: FLOW-01 across all services
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Test-only values; no repository secrets or production credentials are used.
+      AUTH_TOKEN_SECRET: ci-only-auth-token-secret-at-least-32-characters
+      PROFILE_SERVICE_TOKEN: ci-only-profile-service-token
+      GROUP_SERVICE_TOKEN: ci-only-group-service-token
+      NOTIFY_SERVICE_TOKEN: ci-only-notification-service-token
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Build and start isolated services
+        run: docker compose --project-name study-buddy-ci up --build --detach
+
+      - name: Wait for all services
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            ready=true
+            for port in 3001 3002 3003 3004 3005; do
+              if ! curl --fail --silent "http://127.0.0.1:${port}/health" >/dev/null; then
+                ready=false
+                break
+              fi
+            done
+            if [ "$ready" = true ]; then
+              echo 'All five services are healthy.'
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose --project-name study-buddy-ci ps
+          docker compose --project-name study-buddy-ci logs --no-color
+          exit 1
+
+      - name: Run FLOW-01
+        run: node tests/flow-smoke.mjs
+
+      - name: Stop services and remove test data
+        if: always()
+        run: docker compose --project-name study-buddy-ci down --volumes --remove-orphans

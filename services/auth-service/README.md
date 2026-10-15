@@ -37,6 +37,10 @@ Auth เก็บ `userId`, email, bcrypt hash และสถานะบัญ
 
 รัน unit tests ด้วยคำสั่ง `npm test` จากโฟลเดอร์ `services/auth-service`
 
+## GitHub Actions CI
+
+ไฟล์ [auth-service.yml](../../.github/workflows/auth-service.yml) รันเมื่อมีการ push, เปิด PR ที่แก้ Auth Service หรือสั่งรันเองจากแท็บ Actions โดยตรวจ syntax ของ JavaScript, รัน `npm test` และ build Docker image บน Node.js 22; workflow ไม่ publish image และไม่ใช้ production secrets
+
 ## Environment variables
 
 | ตัวแปร | จำเป็น | ความหมาย |

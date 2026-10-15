@@ -107,6 +107,14 @@ async function main() {
     token: requester.token, method: "POST", body: { groupId: group.id },
   }), 409, "requester: duplicate join request");
 
+  const ownerNotifications = expectStatus(await request("notification", "/api/notifications", {
+    token: owner.token,
+  }), 200, "owner: list notifications");
+  const receivedNotification = ownerNotifications.items.find((item) => item.relatedId === membershipRequest.id);
+  assert.ok(receivedNotification, "group owner should receive a notification for the new request");
+  assert.equal(receivedNotification.type, "request_received");
+  assert.equal(receivedNotification.groupId, group.id);
+
   const ownerRequests = expectStatus(await request("membership", `/api/requests?groupId=${encodeURIComponent(group.id)}`, {
     token: owner.token,
   }), 200, "owner: list join requests");
@@ -125,7 +133,7 @@ async function main() {
   const notifications = expectStatus(await request("notification", "/api/notifications", {
     token: requester.token,
   }), 200, "requester: list notifications");
-  const notification = notifications.find((item) => item.relatedId === membershipRequest.id);
+  const notification = notifications.items.find((item) => item.relatedId === membershipRequest.id);
   assert.ok(notification, "requester should receive a notification for the approved request");
   assert.equal(notification.type, "request_approved");
   assert.equal(notification.read, false);

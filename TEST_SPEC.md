@@ -67,3 +67,5 @@ node tests/flow-smoke.mjs
 ```
 
 ตัวทดสอบใช้เฉพาะ Node.js built-in modules และสร้างบัญชี/กลุ่มทดสอบชื่อไม่ซ้ำกัน; การเรียกโดยตรงจะเก็บ record ไว้ใน data store ของ service ที่กำลังเปิดอยู่ จึงควรใช้ environment สำหรับทดสอบ
+
+บน GitHub Actions, workflow `Cross-service Flow Smoke Test` จะ build และเปิด Docker Compose stack แยก, รอ health ของทั้งห้าบริการ, รัน FLOW-01 และลบ containers/volumes ของ stack ทดสอบเสมอเมื่อจบ Workflow ทำงานเมื่อมี PR เข้า `main`, push เข้า `main` หรือสั่งรันเอง โดยเปลี่ยน service, `docker-compose.yml`, API contract, test spec หรือ smoke test; ใช้เฉพาะ token/secret สำหรับทดสอบที่กำหนดใน workflow และไม่ publish image
