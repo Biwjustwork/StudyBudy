@@ -33,6 +33,7 @@ export class GroupStore {
 
   private constructor(private readonly filePath: string) {}
 
+  // เปิด store จากไฟล์ JSON: ไม่มีไฟล์ = สร้างใหม่เปล่า ๆ (ไฟล์เก่าเสียจะโยน error)
   static async open(filePath: string): Promise<GroupStore> {
     const store = new GroupStore(filePath);
     try {
@@ -95,7 +96,8 @@ export class GroupStore {
   }
 
   async addMember(id: string, userId: string): Promise<{ ok: true; value: Group } | { ok: false; error: "not_found" | "conflict" | "capacity_exceeded" | "closed" }> {
-    // Atomic in a single tick: no await between read-check-mutate.
+    // จองที่นั่งแบบ atomic: อ่าน-เช็ก-เพิ่มในจังหวะเดียว ห้ามมี await คั่น (กันแย่งที่นั่งสุดท้าย)
+    // ลำดับเช็ก: กลุ่มปิด > เป็นสมาชิกแล้ว > เต็ม
     const group = this.groups.get(id);
     if (!group) return { ok: false, error: "not_found" };
     if (!group.isOpen) return { ok: false, error: "closed" };
@@ -108,7 +110,8 @@ export class GroupStore {
   }
 
   private async persist(): Promise<void> {
-    // shortcut: a failed write must not poison later writes, single instance only — revisit with a real DB when multi-instance.
+    // เซฟลง disk แบบต่อคิว + เขียนไฟล์ tmp แล้ว rename (กันไฟล์พังตอนเขียนค้าง)
+    // shortcut: เขียนพังครั้งหนึ่งต้องไม่ทำคิวพังถาวร ใช้ได้แค่ instance เดียว — มีหลาย instance ค่อยเปลี่ยนเป็น DB จริง
     this.writeQueue = this.writeQueue.catch(() => {}).then(async () => {
       await mkdir(dirname(this.filePath), { recursive: true });
       const temporaryPath = `${this.filePath}.tmp`;

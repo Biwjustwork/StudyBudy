@@ -1,3 +1,4 @@
+// ไฟล์นี้ทำแค่ผูก env เข้า app: ขาด secret สองตัวนี้ต้องพังตั้งแต่สตาร์ท (fail fast)
 import { resolve } from "node:path";
 import { createApp } from "./app.js";
 import { GroupStore } from "./group-store.js";
