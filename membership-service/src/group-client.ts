@@ -8,7 +8,7 @@ export type GroupSnapshot = {
 
 export interface GroupClient {
   getGroup(groupId: string, bearerToken: string): Promise<GroupSnapshot>;
-  addMember(groupId: string, userId: string, ownerBearerToken: string): Promise<void>;
+  addMember(groupId: string, userId: string): Promise<void>;
 }
 
 export class GroupServiceError extends Error {
@@ -21,8 +21,9 @@ export class GroupServiceError extends Error {
 export class HttpGroupClient implements GroupClient {
   private readonly baseUrl: string;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, private readonly serviceToken: string) {
     if (!baseUrl.trim()) throw new Error("GROUP_URL must be set");
+    if (!serviceToken.trim()) throw new Error("GROUP_SERVICE_TOKEN must be set");
     const parsed = new URL(baseUrl);
     this.baseUrl = parsed.toString().replace(/\/+$/, "");
   }
@@ -42,23 +43,26 @@ export class HttpGroupClient implements GroupClient {
     return body;
   }
 
-  async addMember(groupId: string, userId: string, ownerBearerToken: string): Promise<void> {
-    const response = await this.request(`/api/groups/${encodeURIComponent(groupId)}/members`, ownerBearerToken, {
+  async addMember(groupId: string, userId: string): Promise<void> {
+    const response = await this.request(`/internal/groups/${encodeURIComponent(groupId)}/members`, undefined, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Service-Token": this.serviceToken,
+      },
       body: JSON.stringify({ userId }),
     });
     if (response.status !== 200) throw new GroupServiceError(502, "Group Service returned an unexpected response");
   }
 
-  private async request(path: string, bearerToken: string, init?: RequestInit): Promise<Response> {
+  private async request(path: string, bearerToken?: string, init?: RequestInit): Promise<Response> {
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
         ...init,
         headers: {
           ...init?.headers,
-          Authorization: `Bearer ${bearerToken}`,
+          ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
         },
       });
     } catch (error) {

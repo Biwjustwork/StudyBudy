@@ -1,11 +1,19 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import { type GroupClient, GroupServiceError } from "./group-client.js";
+import { deliverNotification } from "./notification-delivery.js";
+import { type NotificationClient } from "./notification-client.js";
 import { type MembershipRequest, RequestStore } from "./request-store.js";
 
 type AuthenticatedRequest = Request & { userId?: string; bearerToken?: string };
 
-export function createApp(store: RequestStore, tokenSecret: string, groupClient: GroupClient) {
+export function createApp(
+  store: RequestStore,
+  tokenSecret: string,
+  groupClient: GroupClient,
+  notificationClient: NotificationClient,
+) {
+  if (tokenSecret.trim().length < 32) throw new Error("AUTH_TOKEN_SECRET must be at least 32 characters long");
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "32kb" }));
@@ -21,12 +29,14 @@ export function createApp(store: RequestStore, tokenSecret: string, groupClient:
 
   app.use("/api", (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
     const authorization = request.header("authorization");
-    const match = authorization?.match(/^Bearer\s+(.+)$/i);
+    const match = authorization?.match(/^Bearer\s+(\S+)$/i);
     if (!match) return response.status(401).json({ error: "unauthorized", message: "Bearer token is required" });
     try {
       const payload = jwt.verify(match[1], tokenSecret, { algorithms: ["HS256"] }) as JwtPayload;
-      if (typeof payload.userId !== "string" || payload.userId.length === 0) {
-        return response.status(401).json({ error: "unauthorized", message: "Token does not contain a userId" });
+      if (typeof payload.userId !== "string" || payload.userId.trim().length === 0
+        || typeof payload.exp !== "number" || !Number.isFinite(payload.exp)
+        || payload.exp <= Math.floor(Date.now() / 1000)) {
+        return response.status(401).json({ error: "unauthorized", message: "Token must contain a valid userId and exp" });
       }
       request.userId = payload.userId;
       request.bearerToken = match[1];
@@ -57,7 +67,7 @@ export function createApp(store: RequestStore, tokenSecret: string, groupClient:
       if (!created) {
         return response.status(409).json({ error: "conflict", message: "A request already exists for this user and group" });
       }
-      return response.status(201).json(created);
+      return response.status(201).json(publicRequest(created));
     } catch (error) {
       return sendGroupError(response, error);
     }
@@ -73,18 +83,18 @@ export function createApp(store: RequestStore, tokenSecret: string, groupClient:
       if (group.ownerId !== request.userId) {
         return response.status(403).json({ error: "forbidden", message: "Only the group owner can view requests" });
       }
-      return response.json(store.listByGroup(groupId));
+      return response.json(store.listByGroup(groupId).map(publicRequest));
     } catch (error) {
       return sendGroupError(response, error);
     }
   });
 
   app.post("/api/requests/:id/approve", async (request: AuthenticatedRequest, response: Response) => {
-    return decideRequest(request, response, "approved", store, groupClient);
+    return decideRequest(request, response, "approved", store, groupClient, notificationClient);
   });
 
   app.post("/api/requests/:id/reject", async (request: AuthenticatedRequest, response: Response) => {
-    return decideRequest(request, response, "rejected", store, groupClient);
+    return decideRequest(request, response, "rejected", store, groupClient, notificationClient);
   });
 
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
@@ -103,6 +113,7 @@ async function decideRequest(
   status: Exclude<MembershipRequest["status"], "pending">,
   store: RequestStore,
   groupClient: GroupClient,
+  notificationClient: NotificationClient,
 ) {
   const id = request.params["id"];
   const membershipRequest = typeof id === "string" ? store.get(id) : undefined;
@@ -117,19 +128,88 @@ async function decideRequest(
     }
     try {
       if (status === "approved") {
-        await groupClient.addMember(membershipRequest.groupId, membershipRequest.requesterId, request.bearerToken as string);
+        await reserveGroupSeat(store, groupClient, membershipRequest, request.bearerToken as string);
+      } else {
+        await ensureRejectionHasNoReservedSeat(store, groupClient, membershipRequest, request.bearerToken as string);
       }
       const decided = await store.decide(membershipRequest.id, status, request.userId as string);
-      // TODO(member 5): Dispatch this saved notification event once Notification Service is available.
-      return response.json(decided);
+      return response.json(publicRequest(await deliverNotification(store, notificationClient, decided)));
     } catch (error) {
-      return sendGroupError(response, error);
+      if (error instanceof GroupServiceError) return sendGroupError(response, error);
+      throw error;
     } finally {
       store.endDecision(membershipRequest.id);
     }
   } catch (error) {
     return sendGroupError(response, error);
   }
+}
+
+function publicRequest(request: MembershipRequest) {
+  const {
+    approvalState: _approvalState,
+    notificationEvent: _notificationEvent,
+    ...publicRecord
+  } = request;
+  return publicRecord;
+}
+
+async function reserveGroupSeat(
+  store: RequestStore,
+  groupClient: GroupClient,
+  membershipRequest: MembershipRequest,
+  bearerToken: string,
+): Promise<void> {
+  let current = store.get(membershipRequest.id);
+  if (!current) throw new Error("Membership request disappeared during approval");
+  if (current.approvalState === "reserved") return;
+
+  if (current.approvalState === "reserving") {
+    const group = await groupClient.getGroup(current.groupId, bearerToken);
+    if (group.members.includes(current.requesterId)) {
+      await store.setApprovalState(current.id, "reserved");
+      return;
+    }
+  } else {
+    current = await store.setApprovalState(current.id, "reserving");
+  }
+
+  try {
+    await groupClient.addMember(current.groupId, current.requesterId);
+  } catch (error) {
+    if (error instanceof GroupServiceError && error.status === 409) {
+      const group = await groupClient.getGroup(current.groupId, bearerToken);
+      if (group.members.includes(current.requesterId)) {
+        await store.setApprovalState(current.id, "reserved");
+        return;
+      }
+    }
+    if (error instanceof GroupServiceError && error.status === 422) {
+      await store.setApprovalState(current.id, undefined);
+    }
+    throw error;
+  }
+  await store.setApprovalState(current.id, "reserved");
+}
+
+async function ensureRejectionHasNoReservedSeat(
+  store: RequestStore,
+  groupClient: GroupClient,
+  membershipRequest: MembershipRequest,
+  bearerToken: string,
+): Promise<void> {
+  if (!membershipRequest.approvalState) return;
+  const group = await groupClient.getGroup(membershipRequest.groupId, bearerToken);
+  if (group.members.includes(membershipRequest.requesterId)) {
+    if (membershipRequest.approvalState !== "reserved") {
+      await store.setApprovalState(membershipRequest.id, "reserved");
+    }
+    throw new GroupServiceError(409, "A seat has already been reserved for this request");
+  }
+  if (membershipRequest.approvalState === "reserved") {
+    throw new GroupServiceError(409, "Saved seat reservation does not match Group Service");
+  }
+  await store.setApprovalState(membershipRequest.id, undefined);
 }
 
 function sendGroupError(response: Response, error: unknown) {

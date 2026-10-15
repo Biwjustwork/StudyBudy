@@ -1,24 +1,29 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import jwt from "jsonwebtoken";
 import type { AddressInfo } from "node:net";
 import { createApp } from "./app.js";
 import { type GroupClient, type GroupSnapshot, GroupServiceError, HttpGroupClient } from "./group-client.js";
+import { retryPendingNotifications } from "./notification-delivery.js";
+import { type NotificationClient, type NotificationEvent, NotificationServiceError, HttpNotificationClient } from "./notification-client.js";
 import { RequestStore, type MembershipRequest } from "./request-store.js";
 
-const secret = "membership-test-secret";
+const secret = "membership-test-secret-with-more-than-32-characters";
+const serviceToken = "test-group-service-token";
 let directory: string;
 let server: Server;
 let baseUrl: string;
 let store: RequestStore;
 let groups: FakeGroupClient;
+let notifications: FakeNotificationClient;
 const ownerToken = jwt.sign({ userId: "owner-1" }, secret, { algorithm: "HS256", expiresIn: "5m" });
 const requesterToken = jwt.sign({ userId: "student-1" }, secret, { algorithm: "HS256", expiresIn: "5m" });
 const otherToken = jwt.sign({ userId: "student-2" }, secret, { algorithm: "HS256", expiresIn: "5m" });
+const tokenWithoutExpiry = jwt.sign({ userId: "student-3" }, secret, { algorithm: "HS256" });
 
 class FakeGroupClient implements GroupClient {
   group: GroupSnapshot = {
@@ -47,6 +52,16 @@ class FakeGroupClient implements GroupClient {
   }
 }
 
+class FakeNotificationClient implements NotificationClient {
+  error: NotificationServiceError | undefined;
+  events: NotificationEvent[] = [];
+
+  async send(event: NotificationEvent): Promise<void> {
+    this.events.push(structuredClone(event));
+    if (this.error) throw this.error;
+  }
+}
+
 function headers(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 }
@@ -65,7 +80,8 @@ beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "study-buddy-membership-"));
   store = await RequestStore.open(join(directory, "requests.json"));
   groups = new FakeGroupClient();
-  server = createApp(store, secret, groups).listen(0);
+  notifications = new FakeNotificationClient();
+  server = createApp(store, secret, groups, notifications).listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -85,6 +101,13 @@ test("health is public and API requires a valid bearer token", async () => {
   assert.equal(missing.status, 401);
   const invalid = await fetch(`${baseUrl}/api/requests?groupId=group-1`, { headers: headers("invalid") });
   assert.equal(invalid.status, 401);
+  const missingExpiry = await fetch(`${baseUrl}/api/requests?groupId=group-1`, {
+    headers: headers(tokenWithoutExpiry),
+  });
+  assert.equal(missingExpiry.status, 401);
+  const expired = jwt.sign({ userId: "student-3" }, secret, { algorithm: "HS256", expiresIn: -1 });
+  const expiredResponse = await fetch(`${baseUrl}/api/requests?groupId=group-1`, { headers: headers(expired) });
+  assert.equal(expiredResponse.status, 401);
 });
 
 test("request creation validates group, rejects full groups and prevents duplicates", async () => {
@@ -144,9 +167,16 @@ test("approval atomically adds one member, then records approved; repeat is reje
   const result = await approved.json() as MembershipRequest;
   assert.equal(result.status, "approved");
   assert.equal(result.decidedBy, "owner-1");
-  assert.equal(result.notificationStatus, "pending");
+  assert.equal(store.get(created.id)?.approvalState, "reserved");
+  assert.equal(result.notificationStatus, "sent");
   assert.deepEqual(groups.group.members, ["owner-1", "student-1"]);
   assert.equal(groups.addMemberCalls, 1);
+  assert.deepEqual(notifications.events, [{
+    userId: "student-1",
+    type: "request_approved",
+    message: "คำขอเข้ากลุ่มได้รับอนุมัติ",
+    relatedId: created.id,
+  }]);
 
   const repeated = await fetch(url, { method: "POST", headers: headers(ownerToken) });
   assert.equal(repeated.status, 409);
@@ -176,8 +206,11 @@ test("reject changes status once without reserving a group seat", async () => {
   const url = `${baseUrl}/api/requests/${created.id}/reject`;
   const rejected = await fetch(url, { method: "POST", headers: headers(ownerToken) });
   assert.equal(rejected.status, 200);
-  assert.equal((await rejected.json() as MembershipRequest).status, "rejected");
+  const result = await rejected.json() as MembershipRequest;
+  assert.equal(result.status, "rejected");
+  assert.equal(result.notificationStatus, "sent");
   assert.equal(groups.addMemberCalls, 0);
+  assert.equal(notifications.events[0]?.type, "request_rejected");
 
   const repeated = await fetch(url, { method: "POST", headers: headers(ownerToken) });
   assert.equal(repeated.status, 409);
@@ -205,8 +238,80 @@ test("closed groups cannot receive requests", async () => {
   assert.equal(response.status, 422);
 });
 
-test("HTTP Group client uses the delivered routes and forwards owner authorization", async () => {
-  const calls: Array<{ method: string; url: string; authorization: string | undefined; body: string }> = [];
+test("failed membership status persistence recovers without adding the member twice", async () => {
+  const dataFile = join(directory, "recoverable-requests.json");
+  let failApprovalCommit = true;
+  const failingStore = await RequestStore.open(dataFile, async (filePath, records) => {
+    if (failApprovalCommit && records.some((item) => item.status === "approved")) {
+      throw new Error("simulated membership status write failure");
+    }
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify(records), "utf8");
+  });
+  const created = await failingStore.create("group-1", "student-1");
+  assert.ok(created);
+
+  const firstServer = createApp(failingStore, secret, groups, notifications).listen(0);
+  await new Promise<void>((resolve) => firstServer.once("listening", resolve));
+  const firstAddress = firstServer.address() as AddressInfo;
+  const firstResponse = await fetch(`http://127.0.0.1:${firstAddress.port}/api/requests/${created.id}/approve`, {
+    method: "POST",
+    headers: headers(ownerToken),
+  });
+  assert.equal(firstResponse.status, 500);
+  assert.deepEqual(groups.group.members, ["owner-1", "student-1"]);
+  assert.equal(groups.addMemberCalls, 1);
+  assert.equal(failingStore.get(created.id)?.status, "pending");
+  assert.equal(failingStore.get(created.id)?.approvalState, "reserved");
+  const prematureReject = await fetch(`http://127.0.0.1:${firstAddress.port}/api/requests/${created.id}/reject`, {
+    method: "POST",
+    headers: headers(ownerToken),
+  });
+  assert.equal(prematureReject.status, 409);
+  firstServer.close();
+  await new Promise<void>((resolve) => firstServer.once("close", resolve));
+
+  failApprovalCommit = false;
+  const recoveredStore = await RequestStore.open(dataFile);
+  const retryServer = createApp(recoveredStore, secret, groups, notifications).listen(0);
+  await new Promise<void>((resolve) => retryServer.once("listening", resolve));
+  const retryAddress = retryServer.address() as AddressInfo;
+  const retryResponse = await fetch(`http://127.0.0.1:${retryAddress.port}/api/requests/${created.id}/approve`, {
+    method: "POST",
+    headers: headers(ownerToken),
+  });
+  assert.equal(retryResponse.status, 200);
+  assert.equal((await retryResponse.json() as MembershipRequest).status, "approved");
+  assert.equal(groups.addMemberCalls, 1);
+  retryServer.close();
+  await new Promise<void>((resolve) => retryServer.once("close", resolve));
+});
+
+test("Notification failure is recorded and retry reuses the idempotent event", async () => {
+  const created = await createRequest();
+  notifications.error = new NotificationServiceError(503, "Notification Service is unavailable");
+  const response = await fetch(`${baseUrl}/api/requests/${created.id}/reject`, {
+    method: "POST",
+    headers: headers(ownerToken),
+  });
+  assert.equal(response.status, 200);
+  const pending = await response.json() as MembershipRequest;
+  assert.equal(pending.status, "rejected");
+  assert.equal(pending.notificationStatus, "pending");
+  assert.equal(pending.notificationLastError, "Notification Service is unavailable");
+  assert.equal(store.pendingNotifications().length, 1);
+
+  notifications.error = undefined;
+  const reopenedStore = await RequestStore.open(join(directory, "requests.json"));
+  assert.equal(reopenedStore.pendingNotifications()[0]?.notificationEvent?.message, "คำขอเข้ากลุ่มถูกปฏิเสธ");
+  await retryPendingNotifications(reopenedStore, notifications);
+  assert.equal(reopenedStore.get(created.id)?.notificationStatus, "sent");
+  assert.equal(notifications.events.length, 2);
+  assert.deepEqual(notifications.events[0], notifications.events[1]);
+});
+
+test("HTTP Group client follows the internal service-token contract", async () => {
+  const calls: Array<{ method: string; url: string; authorization: string | undefined; serviceToken: string | undefined; body: string }> = [];
   const groupServer = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk.toString();
@@ -214,6 +319,9 @@ test("HTTP Group client uses the delivered routes and forwards owner authorizati
       method: request.method ?? "",
       url: request.url ?? "",
       authorization: request.headers.authorization,
+      serviceToken: Array.isArray(request.headers["x-service-token"])
+        ? request.headers["x-service-token"][0]
+        : request.headers["x-service-token"],
       body,
     });
     response.setHeader("Content-Type", "application/json");
@@ -221,28 +329,77 @@ test("HTTP Group client uses the delivered routes and forwards owner authorizati
       response.writeHead(422).end(JSON.stringify({ error: "capacity_exceeded", message: "Group is full" }));
       return;
     }
+    if (request.method === "POST") {
+      response.end(JSON.stringify({ memberCount: 2 }));
+      return;
+    }
     response.end(JSON.stringify(groups.group));
   });
   groupServer.listen(0);
   await new Promise<void>((resolve) => groupServer.once("listening", resolve));
   const address = groupServer.address() as AddressInfo;
-  const client = new HttpGroupClient(`http://127.0.0.1:${address.port}`);
+  const client = new HttpGroupClient(`http://127.0.0.1:${address.port}`, serviceToken);
   try {
     const group = await client.getGroup("group-1", "owner-token");
     assert.equal(group.id, "group-1");
-    await client.addMember("group-1", "student-1", "owner-token");
+    await client.addMember("group-1", "student-1");
     await assert.rejects(
-      client.addMember("group-1", "full", "owner-token"),
+      client.addMember("group-1", "full"),
       (error: unknown) => error instanceof GroupServiceError && error.status === 422,
     );
-    assert.deepEqual(calls.map((call) => [call.method, call.url, call.authorization]), [
-      ["GET", "/api/groups/group-1", "Bearer owner-token"],
-      ["POST", "/api/groups/group-1/members", "Bearer owner-token"],
-      ["POST", "/api/groups/group-1/members", "Bearer owner-token"],
+    assert.deepEqual(calls.map((call) => [call.method, call.url, call.authorization, call.serviceToken]), [
+      ["GET", "/api/groups/group-1", "Bearer owner-token", undefined],
+      ["POST", "/internal/groups/group-1/members", undefined, serviceToken],
+      ["POST", "/internal/groups/group-1/members", undefined, serviceToken],
     ]);
     assert.equal(calls[1]?.body, '{"userId":"student-1"}');
   } finally {
     groupServer.close();
     await new Promise<void>((resolve) => groupServer.once("close", resolve));
+  }
+});
+
+test("HTTP Notification client sends the contract payload and accepts idempotent 200", async () => {
+  const calls: Array<{ url: string; serviceToken: string | undefined; body: string }> = [];
+  const notificationServer = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk.toString();
+    calls.push({
+      url: request.url ?? "",
+      serviceToken: Array.isArray(request.headers["x-service-token"])
+        ? request.headers["x-service-token"][0]
+        : request.headers["x-service-token"],
+      body,
+    });
+    response.writeHead(calls.length === 1 ? 201 : 200).end("{}");
+  });
+  notificationServer.listen(0);
+  await new Promise<void>((resolve) => notificationServer.once("listening", resolve));
+  const address = notificationServer.address() as AddressInfo;
+  const client = new HttpNotificationClient(`http://127.0.0.1:${address.port}`, "notify-service-secret");
+  const event: NotificationEvent = {
+    userId: "student-1",
+    type: "request_approved",
+    message: "Request approved",
+    relatedId: "request-1",
+  };
+  try {
+    await client.send(event);
+    await client.send(event);
+    assert.deepEqual(calls, [
+      {
+        url: "/internal/notifications",
+        serviceToken: "notify-service-secret",
+        body: JSON.stringify(event),
+      },
+      {
+        url: "/internal/notifications",
+        serviceToken: "notify-service-secret",
+        body: JSON.stringify(event),
+      },
+    ]);
+  } finally {
+    notificationServer.close();
+    await new Promise<void>((resolve) => notificationServer.once("close", resolve));
   }
 });

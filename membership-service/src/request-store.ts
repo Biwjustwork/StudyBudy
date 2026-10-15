@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { type NotificationEvent } from "./notification-client.js";
 
 export type RequestStatus = "pending" | "approved" | "rejected";
+
+export type ApprovalState = "reserving" | "reserved";
 
 export type MembershipRequest = {
   id: string;
@@ -13,18 +16,33 @@ export type MembershipRequest = {
   updatedAt: string;
   decidedBy?: string;
   decidedAt?: string;
-  notificationStatus?: "pending";
+  approvalState?: ApprovalState;
+  notificationEvent?: NotificationEvent;
+  notificationStatus?: "pending" | "sent";
+  notificationLastError?: string;
 };
+
+export type PersistMembershipRecords = (
+  filePath: string,
+  records: MembershipRequest[],
+) => Promise<void>;
 
 export class RequestStore {
   private requests = new Map<string, MembershipRequest>();
   private decisionLocks = new Set<string>();
+  private notificationLocks = new Set<string>();
   private writeQueue: Promise<void> = Promise.resolve();
 
-  private constructor(private readonly filePath: string) {}
+  private constructor(
+    private readonly filePath: string,
+    private readonly persistRecords: PersistMembershipRecords,
+  ) {}
 
-  static async open(filePath: string): Promise<RequestStore> {
-    const store = new RequestStore(filePath);
+  static async open(
+    filePath: string,
+    persistRecords: PersistMembershipRecords = persistMembershipRecords,
+  ): Promise<RequestStore> {
+    const store = new RequestStore(filePath, persistRecords);
     try {
       const data: unknown = JSON.parse(await readFile(filePath, "utf8"));
       if (!Array.isArray(data)) throw new Error("Membership data must be a JSON array");
@@ -34,7 +52,6 @@ export class RequestStore {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      await mkdir(dirname(filePath), { recursive: true });
       await store.persist();
     }
     return store;
@@ -87,23 +104,21 @@ export class RequestStore {
     return true;
   }
 
-  async decide(
-    id: string,
-    status: Exclude<RequestStatus, "pending">,
-    decidedBy: string,
-  ): Promise<MembershipRequest> {
+  beginNotificationDelivery(id: string): boolean {
     const request = this.requests.get(id);
-    if (!request || request.status !== "pending" || !this.decisionLocks.has(id)) {
-      throw new Error("Membership request is not available for decision");
-    }
+    if (!request || request.status === "pending" || request.notificationStatus !== "pending"
+      || this.notificationLocks.has(id)) return false;
+    this.notificationLocks.add(id);
+    return true;
+  }
+
+  async setApprovalState(id: string, approvalState: ApprovalState | undefined): Promise<MembershipRequest> {
+    const request = this.requests.get(id);
+    if (!request || request.status !== "pending") throw new Error("Pending membership request not found");
     const previous = structuredClone(request);
-    request.status = status;
-    request.decidedBy = decidedBy;
-    request.decidedAt = new Date().toISOString();
-    request.updatedAt = request.decidedAt;
-    // TODO(member 5): A Notification Service is not present on this branch.
-    // Keep the event recoverable with the decided request until its endpoint is agreed.
-    request.notificationStatus = "pending";
+    if (approvalState === undefined) delete request.approvalState;
+    else request.approvalState = approvalState;
+    request.updatedAt = new Date().toISOString();
     try {
       await this.persist();
     } catch (error) {
@@ -113,20 +128,108 @@ export class RequestStore {
     return structuredClone(request);
   }
 
+  async decide(
+    id: string,
+    status: Exclude<RequestStatus, "pending">,
+    decidedBy: string,
+  ): Promise<MembershipRequest> {
+    const request = this.requests.get(id);
+    if (!request || request.status !== "pending" || !this.decisionLocks.has(id)) {
+      throw new Error("Membership request is not available for decision");
+    }
+    if (status === "approved" && request.approvalState !== "reserved") {
+      throw new Error("A group seat must be durably reserved before approval");
+    }
+    const previous = structuredClone(request);
+    request.status = status;
+    request.decidedBy = decidedBy;
+    request.decidedAt = new Date().toISOString();
+    request.updatedAt = request.decidedAt;
+    request.notificationEvent = {
+      userId: request.requesterId,
+      type: status === "approved" ? "request_approved" : "request_rejected",
+      message: status === "approved"
+        ? "คำขอเข้ากลุ่มได้รับอนุมัติ"
+        : "คำขอเข้ากลุ่มถูกปฏิเสธ",
+      relatedId: request.id,
+    };
+    request.notificationStatus = "pending";
+    delete request.notificationLastError;
+    try {
+      await this.persist();
+    } catch (error) {
+      this.requests.set(id, previous);
+      throw error;
+    }
+    return structuredClone(request);
+  }
+
+  pendingNotifications(): MembershipRequest[] {
+    return [...this.requests.values()]
+      .filter((request) => request.status !== "pending" && request.notificationStatus === "pending")
+      .map((request) => structuredClone(request));
+  }
+
+  async markNotificationSent(id: string): Promise<MembershipRequest> {
+    return this.updateNotification(id, "sent");
+  }
+
+  async markNotificationFailed(id: string, message: string): Promise<MembershipRequest> {
+    return this.updateNotification(id, "pending", message);
+  }
+
   endDecision(id: string): void {
     this.decisionLocks.delete(id);
   }
 
+  endNotificationDelivery(id: string): void {
+    this.notificationLocks.delete(id);
+  }
+
   private async persist(): Promise<void> {
-    this.writeQueue = this.writeQueue.catch((error: unknown) => {
+    const records = [...this.requests.values()].map((request) => structuredClone(request));
+    const write = this.writeQueue.catch((error: unknown) => {
       console.error("Previous membership data write failed", error);
     }).then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      const temporaryPath = `${this.filePath}.tmp`;
-      await writeFile(temporaryPath, JSON.stringify([...this.requests.values()], null, 2), "utf8");
-      await rename(temporaryPath, this.filePath);
+      await this.persistRecords(this.filePath, records);
     });
-    return this.writeQueue;
+    this.writeQueue = write;
+    return write;
+  }
+
+  private async updateNotification(
+    id: string,
+    status: "pending" | "sent",
+    lastError?: string,
+  ): Promise<MembershipRequest> {
+    const request = this.requests.get(id);
+    if (!request || request.status === "pending") throw new Error("Decided membership request not found");
+    const previous = structuredClone(request);
+    request.notificationStatus = status;
+    if (lastError === undefined) delete request.notificationLastError;
+    else request.notificationLastError = lastError;
+    request.updatedAt = new Date().toISOString();
+    try {
+      await this.persist();
+    } catch (error) {
+      this.requests.set(id, previous);
+      throw error;
+    }
+    return structuredClone(request);
+  }
+}
+
+async function persistMembershipRecords(filePath: string, records: MembershipRequest[]): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true });
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(records, null, 2)}\n`, "utf8");
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    await unlink(temporaryPath).catch((cleanupError: unknown) => {
+      console.error("Failed to clean up temporary membership data", cleanupError);
+    });
+    throw error;
   }
 }
 
@@ -141,5 +244,17 @@ function isMembershipRequest(value: unknown): value is MembershipRequest {
     && typeof request.updatedAt === "string"
     && (request.decidedBy === undefined || typeof request.decidedBy === "string")
     && (request.decidedAt === undefined || typeof request.decidedAt === "string")
-    && (request.notificationStatus === undefined || request.notificationStatus === "pending");
+    && (request.approvalState === undefined || request.approvalState === "reserving" || request.approvalState === "reserved")
+    && (request.notificationEvent === undefined || isNotificationEvent(request.notificationEvent))
+    && (request.notificationStatus === undefined || request.notificationStatus === "pending" || request.notificationStatus === "sent")
+    && (request.notificationLastError === undefined || typeof request.notificationLastError === "string");
+}
+
+function isNotificationEvent(value: unknown): value is NotificationEvent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const event = value as Partial<NotificationEvent>;
+  return typeof event.userId === "string" && event.userId.trim().length > 0
+    && (event.type === "request_approved" || event.type === "request_rejected")
+    && typeof event.message === "string" && event.message.trim().length > 0 && event.message.length <= 2000
+    && typeof event.relatedId === "string" && event.relatedId.trim().length > 0;
 }

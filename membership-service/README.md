@@ -4,7 +4,7 @@ Membership API owned by member 4. It stores join requests, permits only the grou
 
 ## API
 
-All `/api` endpoints require an Auth Service JWT with an HS256 `userId` claim.
+All `/api` endpoints require an Auth Service JWT signed with HS256 and containing a non-empty `userId` and an unexpired `exp` claim. Auth Service currently issues expiring tokens (default `JWT_EXPIRES_IN=1h`); Membership rejects tokens with no expiration.
 
 | Method | Path | Behavior |
 | --- | --- | --- |
@@ -14,15 +14,18 @@ All `/api` endpoints require an Auth Service JWT with an HS256 `userId` claim.
 | POST | `/api/requests/:id/approve` | Owner only; reserves a Group seat before marking the request `approved` |
 | POST | `/api/requests/:id/reject` | Owner only; marks a pending request `rejected` |
 
-Requests are unique per `(groupId, requesterId)`, including after a decision. A full or closed group returns `422`; repeated requests or decisions return `409`. If Group Service rejects or cannot complete a reservation, the request remains pending. Concurrent decisions in one Membership Service process are locked so they cannot reserve the same request twice.
+Requests are unique per `(groupId, requesterId)`, including after a decision. A full or closed group returns `422`; repeated requests or decisions return `409`. A decision response includes `notificationStatus` (`sent` or `pending`) and, if pending, a `notificationLastError` to make an undelivered event visible.
 
-## Cross-service dependencies and handoff
+## Cross-service behavior and recovery
 
-- **Group Service (member 3):** `GROUP_URL` is configured for the delivered service. This branch currently supports `GET /api/groups/:id` and owner-authorized `POST /api/groups/:id/members`, forwarding the requesting owner's bearer token. Membership never writes `members[]`.
-- **Contract mismatch to resolve before merge:** The API contract draft on `feature/auth-service` instead specifies `POST /internal/groups/:id/members` with `X-Service-Token`. The delivered Group Service on `Biw-dev` does not implement that internal endpoint. This branch follows the delivered Group API; the service owners should reconcile the endpoint/auth contract before merging the branches.
-- **Notification Service (member 5):** No Notification Service is present on this base branch. `NOTIFY_URL` and `NOTIFY_SERVICE_TOKEN` are intentionally blank, and notification dispatch/retry code is intentionally not implemented. A decided request stores `notificationStatus: "pending"` so the event can be reconstructed after the notification contract is delivered. Member 5 should provide endpoint, auth header, event schema, and retry/duplicate semantics before this dependency is filled in.
+- **Group Service:** Membership reads group details with the owner’s bearer token, then reserves a seat with `POST /internal/groups/:id/members` and `X-Service-Token: GROUP_SERVICE_TOKEN`. The token value must match Group Service’s `SERVICE_TOKEN`. Membership never edits Group data directly.
+- **Recoverable approval:** Before calling Group, Membership durably records `approvalState: "reserving"`. After Group confirms the reservation, it durably records `approvalState: "reserved"` before changing the request to `approved`. If writing the final request decision fails after Group added the member, retry checks the authoritative group membership and finalizes the same request without adding the member again.
+- **Notification Service:** On approval/rejection, Membership saves a deterministic event in its request record and sends `POST /internal/notifications` with `X-Service-Token: NOTIFY_SERVICE_TOKEN`. A `201` or idempotent `200` marks it sent. Errors remain pending with their last error recorded; a startup and 30-second retry worker resends the same `(userId, relatedId, type, message)` payload, which Notification deduplicates.
+- JSON-file persistence is designed for one process/replica per service, as specified in the shared contract. Give Membership, Group, and Notification separate persistent data volumes when running in containers.
 
-The absent Notification integration is a known handoff item, not a successful notification delivery. The membership API reports the saved request decision and leaves the event pending until that dependency is implemented.
+## Contract compatibility
+
+The service is wired to the current Group and Notification contracts in the repository. Group reads use the owner’s JWT; seat reservation uses `POST /internal/groups/:id/members` with Group’s `SERVICE_TOKEN`. Notification delivery uses `POST /internal/notifications` with the shared `NOTIFY_SERVICE_TOKEN`. Notification accepts idempotent `200` retries as well as first-delivery `201` responses.
 
 ## Run locally
 
@@ -32,7 +35,9 @@ npm install
 npm run dev
 ```
 
-Set `AUTH_TOKEN_SECRET` to the Auth Service secret and `GROUP_URL` to the Group Service base URL. Do not commit `.env` or real tokens. Request data is stored in `MEMBERSHIP_DATA_FILE` (default `./data/requests.json`).
+Set `AUTH_TOKEN_SECRET` to the same secret as Auth Service (at least 32 characters), `GROUP_URL` and `NOTIFY_URL` to the peer service base URLs, `GROUP_SERVICE_TOKEN` to Group’s `SERVICE_TOKEN`, and `NOTIFY_SERVICE_TOKEN` to Notification’s shared service token. Do not commit `.env` or real tokens. Request data is stored in `MEMBERSHIP_DATA_FILE` (default `./data/requests.json`).
+
+For containers, use service DNS names on the shared Docker network rather than `localhost` for `GROUP_URL` and `NOTIFY_URL`.
 
 Open `membership.html` in a browser to submit a request or manage requests as the group owner. Enter the Membership API URL and a bearer token; the page does not save the token. Error responses are shown to the user.
 
