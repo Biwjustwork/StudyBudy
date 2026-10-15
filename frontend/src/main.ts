@@ -3,6 +3,60 @@ import './style.css';
 // ================= Types =================
 type ApiError = { error?: string; message?: string };
 
+const apiErrorTranslations: Record<string, string> = {
+  'A request already exists for this user and group': 'คุณส่งคำขอเข้าร่วมกลุ่มนี้ไปแล้ว กรุณารอผลการพิจารณา',
+  'User is already a group member or owner': 'คุณเป็นสมาชิกหรือเจ้าของกลุ่มนี้อยู่แล้ว',
+  'Group is full or closed for new members': 'กลุ่มนี้เต็มแล้วหรือปิดรับสมาชิกใหม่',
+  'Group is full': 'กลุ่มนี้มีสมาชิกครบแล้ว',
+  'Group is closed for new members': 'กลุ่มนี้ปิดรับสมาชิกใหม่แล้ว',
+  'Email or password is incorrect.': 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
+  'An account with this email already exists.': 'อีเมลนี้มีบัญชีผู้ใช้แล้ว',
+  'Email, name, or password does not meet the requirements.': 'อีเมล ชื่อ หรือรหัสผ่านไม่ตรงตามข้อกำหนด',
+  'This registration is incomplete. Retry with the original details.': 'การสมัครยังไม่สมบูรณ์ กรุณาลองอีกครั้งด้วยข้อมูลเดิม',
+  'Registration is incomplete. Retry with the same email, name, and password.': 'การสมัครยังไม่สมบูรณ์ กรุณาลองอีกครั้งด้วยอีเมล ชื่อ และรหัสผ่านเดิม',
+  'The account for this token is unavailable.': 'ไม่พบบัญชีผู้ใช้สำหรับเซสชันนี้ กรุณาเข้าสู่ระบบใหม่',
+  'A valid Bearer token is required.': 'กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+  'Bearer token is required': 'กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+  'Token is invalid or expired': 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
+  'Token must contain a valid userId and exp': 'ข้อมูลเซสชันไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่',
+  'Group not found': 'ไม่พบกลุ่มที่เลือก กลุ่มนี้อาจถูกลบไปแล้ว',
+  'User is already a member of this group': 'คุณเป็นสมาชิกกลุ่มนี้อยู่แล้ว',
+  'Only the group owner can view requests': 'เฉพาะเจ้าของกลุ่มเท่านั้นที่ดูคำขอเข้าร่วมได้',
+  'Only the group owner can decide requests': 'เฉพาะเจ้าของกลุ่มเท่านั้นที่อนุมัติหรือปฏิเสธคำขอได้',
+  'Request has already been decided or is being processed': 'คำขอนี้ได้รับการพิจารณาแล้วหรือกำลังดำเนินการ',
+  'Request not found': 'ไม่พบคำขอเข้าร่วมนี้',
+  'subject query is required': 'กรุณาระบุชื่อวิชาที่ต้องการค้นหา',
+  'subjects must be an array of non-empty strings': 'กรุณาระบุชื่อวิชาอย่างน้อยหนึ่งวิชา และอย่าเว้นช่องว่าง',
+  'subjects must not contain duplicates': 'มีชื่อวิชาซ้ำกัน กรุณาตรวจสอบอีกครั้ง',
+  'You can only view your own profile': 'คุณดูได้เฉพาะโปรไฟล์ของตัวเอง',
+  'You can only update your own profile': 'คุณแก้ไขได้เฉพาะโปรไฟล์ของตัวเอง',
+  'User not found': 'ไม่พบข้อมูลผู้ใช้',
+  'Request body must be valid JSON': 'ข้อมูลที่ส่งไม่ถูกต้อง กรุณาลองใหม่',
+  'Request body is too large': 'ข้อมูลที่ส่งมีขนาดใหญ่เกินไป',
+  'An unexpected error occurred.': 'ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง',
+  'An unexpected error occurred': 'ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง',
+};
+
+function localizeApiError(data: ApiError, status: number): string {
+  const message = data.message?.trim();
+  if (message && apiErrorTranslations[message]) return apiErrorTranslations[message];
+  if (message && /[\u0E00-\u0E7F]/.test(message)) return message;
+
+  const errorCode = data.error?.toLowerCase();
+  if (errorCode === 'conflict') return 'รายการนี้ซ้ำหรือไม่สามารถดำเนินการได้';
+  if (errorCode === 'capacity_exceeded') return 'กลุ่มนี้เต็มแล้วหรือปิดรับสมาชิกใหม่';
+  if (errorCode === 'not_found') return 'ไม่พบข้อมูลที่ต้องการ';
+  if (errorCode === 'forbidden') return 'คุณไม่มีสิทธิ์ดำเนินการนี้';
+  if (errorCode === 'unauthorized' || status === 401) return 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
+  if (errorCode === 'validation_error') return 'ข้อมูลไม่ครบหรือไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่';
+  if (status >= 500) return 'ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง';
+  if (status === 404) return 'ไม่พบข้อมูลที่ต้องการ';
+  if (status === 409) return 'รายการนี้ซ้ำหรือไม่สามารถดำเนินการได้';
+  if (status === 422) return 'ไม่สามารถดำเนินการได้ กลุ่มอาจเต็มหรือปิดรับสมาชิกแล้ว';
+  if (status === 400) return 'ข้อมูลไม่ครบหรือไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่';
+  return 'ทำรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
+}
+
 type AuthResponse = {
   token?: string;
   accessToken?: string;
@@ -169,8 +223,7 @@ async function apiRequest<T>(
     if (response.status === 401 && authenticated) {
       handleSessionExpired();
     }
-    const errorMsg = data.message || data.error || `เกิดข้อผิดพลาด (${response.status})`;
-    throw new Error(errorMsg);
+    throw new Error(localizeApiError(data, response.status));
   }
 
   return data;
@@ -249,6 +302,7 @@ function setAuthTab(tab: 'login' | 'register') {
 
 function showLogin(message = '') {
   authView.classList.remove('hidden');
+  byId('learning-strip').classList.remove('hidden');
   workspaceView.classList.add('hidden');
   userControls.classList.add('hidden');
   notiDropdown.classList.add('hidden');
@@ -257,6 +311,7 @@ function showLogin(message = '') {
 
 async function showWorkspace() {
   authView.classList.add('hidden');
+  byId('learning-strip').classList.add('hidden');
   workspaceView.classList.remove('hidden');
   userControls.classList.remove('hidden');
 
@@ -299,6 +354,7 @@ function switchTab(tab: TabName) {
 
 // ================= 1. Group Service Functions =================
 async function loadGroups(subject = '', openOnly = true) {
+  byId('group-result-count').textContent = 'กำลังค้นหา...';
   groupsList.innerHTML = '<div class="loading-state">กำลังโหลดรายการกลุ่มอ่านหนังสือ...</div>';
   try {
     const params = new URLSearchParams();
@@ -310,11 +366,13 @@ async function loadGroups(subject = '', openOnly = true) {
 
     renderGroups(groups);
   } catch (error) {
+    byId("group-result-count").textContent = "โหลดไม่สำเร็จ";
     groupsList.innerHTML = `<div class="empty-state"><p class="required">${(error as Error).message}</p><button class="button button-quiet" onclick="location.reload()">ลองใหม่</button></div>`;
   }
 }
 
 function renderGroups(groups: Group[]) {
+  byId('group-result-count').textContent = `พบ ${groups.length} กลุ่ม`;
   if (groups.length === 0) {
     groupsList.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
@@ -328,7 +386,7 @@ function renderGroups(groups: Group[]) {
   const myId = currentUserId();
 
   groupsList.innerHTML = groups
-    .map((group) => {
+    .map((group, index) => {
       const isOwner = group.ownerId === myId;
       const isMember = group.members.includes(myId ?? '');
       const isFull = group.members.length >= group.maxMembers;
@@ -347,7 +405,7 @@ function renderGroups(groups: Group[]) {
       if (isOwner) {
         actionHtml = `
           <div style="display:flex; align-items:center; gap:8px;">
-            <span class="badge-owner">👑 กลุ่มของคุณ</span>
+            <span class="badge-owner">กลุ่มของคุณ</span>
             <button class="button button-quiet button-sm" data-action="view-requests" data-group-id="${group.id}">
               ดูคำขอ
             </button>
@@ -364,7 +422,8 @@ function renderGroups(groups: Group[]) {
       }
 
       return `
-        <article class="group-card" data-id="${group.id}">
+        <article class="group-card" data-id="${escapeHtml(group.id)}">
+          <div class="session-index" aria-hidden="true"><span>SESSION</span><b>${String(index + 1).padStart(2, "0")}</b><span>✳</span></div>
           <div>
             <div class="group-header">
               <span class="subject-badge">${escapeHtml(group.subject)}</span>
@@ -373,18 +432,18 @@ function renderGroups(groups: Group[]) {
             <h3 class="group-topic">${escapeHtml(group.topic)}</h3>
             <div class="group-meta-list">
               <div class="group-meta-item">
-                <span>🕒</span>
+                <span aria-hidden="true">◷</span>
                 <span>${formatDate(group.startsAt)}</span>
               </div>
               <div class="group-meta-item">
-                <span>📍</span>
+                <span aria-hidden="true">⌖</span>
                 <span>${escapeHtml(group.location)}</span>
               </div>
             </div>
             ${group.description ? `<p class="group-desc">${escapeHtml(group.description)}</p>` : ''}
           </div>
           <div class="group-card-footer">
-            <span class="seats-counter">👥 ${group.members.length} / ${group.maxMembers} ที่นั่ง</span>
+            <span class="seats-counter">◎ ${group.members.length} / ${group.maxMembers} ที่นั่ง</span>
             ${actionHtml}
           </div>
         </article>
@@ -674,6 +733,25 @@ function escapeHtml(str: string): string {
 
 // ================= Event Listeners Wiring =================
 function setupEventListeners() {
+  const introPanel = document.querySelector<HTMLElement>('.intro-panel');
+  if (introPanel && window.matchMedia('(pointer: fine) and (prefers-reduced-motion: no-preference)').matches) {
+    introPanel.addEventListener('pointermove', (event) => {
+      const bounds = introPanel.getBoundingClientRect();
+      const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+      const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+      introPanel.style.setProperty('--tilt-x', `${(-y * 3).toFixed(2)}deg`);
+      introPanel.style.setProperty('--tilt-y', `${(x * 3).toFixed(2)}deg`);
+      introPanel.style.setProperty('--glow-x', `${((x + 0.5) * 100).toFixed(1)}%`);
+      introPanel.style.setProperty('--glow-y', `${((y + 0.5) * 100).toFixed(1)}%`);
+    });
+    introPanel.addEventListener('pointerleave', () => {
+      introPanel.style.setProperty('--tilt-x', '0deg');
+      introPanel.style.setProperty('--tilt-y', '0deg');
+      introPanel.style.setProperty('--glow-x', '50%');
+      introPanel.style.setProperty('--glow-y', '50%');
+    });
+  }
+
   // Auth Tabs
   byId<HTMLButtonElement>('login-tab').addEventListener('click', () => setAuthTab('login'));
   byId<HTMLButtonElement>('register-tab').addEventListener('click', () => setAuthTab('register'));

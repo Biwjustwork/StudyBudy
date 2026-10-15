@@ -1,134 +1,183 @@
 <!doctype html>
 <html lang="th">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f7f7f2" />
-    <meta name="description" content="Study Buddy — ค้นหา รวมกลุ่ม และนัดอ่านหนังสือร่วมกัน" />
-    <title>Study Buddy — ระบบจับกลุ่มอ่านหนังสือ</title>
-  </head>
-  <body>
-    <div class="ambient ambient-one"></div>
-    <div class="ambient ambient-two"></div>
 
-    <main id="app" class="app-shell">
-      <!-- Topbar Header -->
-      <header class="topbar">
-        <a class="brand" href="#" aria-label="Study Buddy หน้าหลัก">
-          <span class="brand-mark" aria-hidden="true">sb</span>
-          <span>study buddy<span class="brand-period">.</span></span>
-        </a>
-        <div class="topbar-right">
-          <span class="online-dot"></span>
-          <span class="topbar-note">พื้นที่สำหรับการเรียนรู้ร่วมกัน</span>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5faff" />
+  <meta name="description" content="Study Buddy — ค้นหา รวมกลุ่ม และนัดอ่านหนังสือร่วมกัน" />
+  <title>Study Buddy — ระบบจับกลุ่มอ่านหนังสือ</title>
+</head>
 
-          <!-- User session actions (hidden until login) -->
-          <div id="user-controls" class="user-controls hidden">
-            <!-- Notification Bell -->
-            <div class="noti-wrapper">
-              <button id="noti-toggle-btn" class="icon-button" type="button" aria-label="การแจ้งเตือน" title="การแจ้งเตือน">
-                <span class="icon" aria-hidden="true">🔔</span>
-                <span id="noti-badge" class="badge-count hidden">0</span>
-              </button>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
 
-              <!-- Notifications Dropdown Panel -->
-              <div id="noti-dropdown" class="noti-dropdown hidden" role="region" aria-label="รายการแจ้งเตือน">
-                <div class="noti-header">
-                  <div>
-                    <strong>การแจ้งเตือน</strong>
-                    <span id="noti-unread-text" class="muted-small">ไม่มีข้อความใหม่</span>
-                  </div>
-                  <div class="noti-actions">
-                    <button id="noti-refresh-btn" class="button-text" type="button">↻ รีเฟรช</button>
-                    <button id="noti-close-btn" class="button-text" type="button">✕</button>
-                  </div>
+  <main id="app" class="app-shell">
+    <!-- Topbar Header -->
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Study Buddy หน้าหลัก">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" role="presentation" focusable="false">
+            <defs>
+              <linearGradient id="logo-sky" x1="5" y1="4" x2="42" y2="45" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#55B9F2" />
+                <stop offset="1" stop-color="#176BB4" />
+              </linearGradient>
+            </defs>
+            <circle cx="24" cy="24" r="23" fill="url(#logo-sky)" />
+            <ellipse class="logo-orbit" cx="24" cy="24" rx="17" ry="7.5" transform="rotate(-34 24 24)" fill="none" stroke="white" stroke-opacity=".8" stroke-width="1.3" />
+            <circle cx="10.1" cy="14.6" r="2" fill="#DFF5FF" />
+            <path d="M24 10.5 27.1 20.9 37.5 24 27.1 27.1 24 37.5 20.9 27.1 10.5 24 20.9 20.9 24 10.5Z" fill="white" />
+            <circle cx="36" cy="31.2" r="1.5" fill="#B8E9FF" />
+          </svg>
+        </span>
+        <span>study buddy<span class="brand-period">.</span><small class="brand-caption">LEARNING
+            CONSTELLATION</small></span>
+      </a>
+      <div class="topbar-right">
+        <span class="online-dot"></span>
+        <span class="topbar-note">พื้นที่สำหรับการเรียนรู้ร่วมกัน</span>
+
+        <!-- User session actions (hidden until login) -->
+        <div id="user-controls" class="user-controls hidden">
+          <!-- Notification Bell -->
+          <div class="noti-wrapper">
+            <button id="noti-toggle-btn" class="icon-button" type="button" aria-label="การแจ้งเตือน"
+              title="การแจ้งเตือน">
+              <span class="icon" aria-hidden="true">🔔</span>
+              <span id="noti-badge" class="badge-count hidden">0</span>
+            </button>
+
+            <!-- Notifications Dropdown Panel -->
+            <div id="noti-dropdown" class="noti-dropdown hidden" role="region" aria-label="รายการแจ้งเตือน">
+              <div class="noti-header">
+                <div>
+                  <strong>การแจ้งเตือน</strong>
+                  <span id="noti-unread-text" class="muted-small">ไม่มีข้อความใหม่</span>
                 </div>
-                <div id="noti-list" class="noti-list" aria-live="polite">
-                  <div class="empty-state-compact">ไม่มีการแจ้งเตือนในขณะนี้</div>
+                <div class="noti-actions">
+                  <button id="noti-refresh-btn" class="button-text" type="button">↻ รีเฟรช</button>
+                  <button id="noti-close-btn" aria-label="ปิดการแจ้งเตือน" class="button-text" type="button">✕</button>
                 </div>
               </div>
+              <div id="noti-list" class="noti-list" aria-live="polite">
+                <div class="empty-state-compact">ไม่มีการแจ้งเตือนในขณะนี้</div>
+              </div>
             </div>
-
-            <!-- Welcome User Pill -->
-            <div class="welcome-pill">
-              <span id="avatar-initial" class="avatar-small">น</span>
-              <span id="welcome-name" class="user-name">นักเรียน</span>
-            </div>
-
-            <!-- Logout -->
-            <button id="logout-button" class="button button-quiet" type="button">ออกจากระบบ</button>
           </div>
+
+          <!-- Welcome User Pill -->
+          <div class="welcome-pill">
+            <span id="avatar-initial" class="avatar-small">น</span>
+            <span id="welcome-name" class="user-name">นักเรียน</span>
+          </div>
+
+          <!-- Logout -->
+          <button id="logout-button" class="button button-quiet" type="button">ออกจากระบบ</button>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <!-- 1. Authentication View -->
-      <section id="auth-view" class="auth-layout">
-        <div class="intro-panel">
-          <div class="eyebrow"><span class="eyebrow-line"></span> STUDY BETTER, TOGETHER</div>
-          <h1>วิชานี้ยากขึ้น<br />ถ้าอ่าน<span class="highlight">คนเดียว</span></h1>
-          <p class="intro-copy">บอกเราว่าคุณกำลังเรียนอะไร แล้วค้นหากลุ่มหรือนัดเพื่อนที่อยากเข้าใจไปด้วยกัน</p>
-          <div class="note-card">
-            <span class="note-icon" aria-hidden="true">✳</span>
-            <div><strong>จับกลุ่มอ่านหนังสือแบบครบวงจร</strong><span>ค้นหากลุ่มตามวิชา นัดเวลา สถานที่ และส่งคำขอเข้าร่วมได้ทันที</span></div>
-          </div>
-          <div class="decor-stamp" aria-hidden="true"><span>learn</span><span>together</span><span>✷</span></div>
+    <!-- 1. Authentication View -->
+    <section id="auth-view" class="auth-layout">
+      <div class="intro-panel">
+        <div class="eyebrow">THE STUDY OBSERVATORY / 01</div>
+        <h1>โลกการเรียน<br>กว้างขึ้น เมื่อมี<br><span class="highlight">เพื่อนร่วมวงโคจร.</span></h1>
+        <p class="intro-copy">จากวิชาที่ชอบ สู่เพื่อนที่เข้าใจ<br>ค้นหากลุ่ม นัดอ่านหนังสือ แล้วเติบโตไปด้วยกัน</p>
+        <div class="sky-map" aria-hidden="true">
+          <span class="sky-label sky-label-one">BIOLOGY</span><span class="sky-label sky-label-two">DESIGN</span><span
+            class="sky-label sky-label-three">CALCULUS</span>
+          <span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span
+            class="sky-star star-one">✦</span><span class="sky-star star-two">✧</span><span
+            class="sky-star star-three">✦</span><span class="sky-core">✳</span>
+        </div>
+        <div class="note-card">
+          <span class="note-icon" aria-hidden="true">✳</span>
+          <div><strong>เรื่องยาก ๆ ก็เข้าใจได้</strong><span>เมื่อเราไม่ได้เรียนอยู่คนเดียว</span></div>
+        </div>
+        <div class="decor-stamp" aria-hidden="true"><span>LEARN</span><span>IN ORBIT</span><span>✷</span></div>
+      </div>
+
+      <section class="auth-card" aria-labelledby="auth-title">
+        <div class="auth-card-top"><span class="mini-label">YOUR NEXT CHAPTER</span><span class="card-spark"
+            aria-hidden="true">✦</span></div>
+        <h2 id="auth-title">ยินดีต้อนรับ</h2>
+        <p class="muted">เข้าสู่ระบบหรือสร้างบัญชีใหม่เพื่อเริ่มจับกลุ่มอ่านหนังสือ</p>
+
+        <div class="auth-tabs" role="tablist" aria-label="เลือกการเข้าใช้งาน">
+          <button id="login-tab" class="auth-tab active" type="button" role="tab"
+            aria-selected="true">เข้าสู่ระบบ</button>
+          <button id="register-tab" class="auth-tab" type="button" role="tab" aria-selected="false">สร้างบัญชี</button>
         </div>
 
-        <section class="auth-card" aria-labelledby="auth-title">
-          <div class="auth-card-top"><span class="mini-label">WELCOME TO STUDY BUDDY</span><span class="card-spark" aria-hidden="true">✦</span></div>
-          <h2 id="auth-title">ยินดีต้อนรับ</h2>
-          <p class="muted">เข้าสู่ระบบหรือสร้างบัญชีใหม่เพื่อเริ่มจับกลุ่มอ่านหนังสือ</p>
-          
-          <div class="auth-tabs" role="tablist" aria-label="เลือกการเข้าใช้งาน">
-            <button id="login-tab" class="auth-tab active" type="button" role="tab" aria-selected="true">เข้าสู่ระบบ</button>
-            <button id="register-tab" class="auth-tab" type="button" role="tab" aria-selected="false">สร้างบัญชี</button>
-          </div>
+        <form id="login-form" class="form-stack">
+          <label for="login-username">อีเมล</label>
+          <input id="login-username" name="email" type="email" autocomplete="email" placeholder="you@example.com"
+            required />
+          <label for="login-password">รหัสผ่าน</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password"
+            placeholder="กรอกรหัสผ่าน" required />
+          <button class="button button-primary submit-button" type="submit">เข้าสู่ระบบ <span
+              aria-hidden="true">↗</span></button>
+        </form>
 
-          <form id="login-form" class="form-stack">
-            <label for="login-username">อีเมล</label>
-            <input id="login-username" name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
-            <label for="login-password">รหัสผ่าน</label>
-            <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="กรอกรหัสผ่าน" required />
-            <button class="button button-primary submit-button" type="submit">เข้าสู่ระบบ <span aria-hidden="true">↗</span></button>
-          </form>
+        <form id="register-form" class="form-stack hidden">
+          <label for="register-name">ชื่อที่ใช้แสดง</label>
+          <input id="register-name" name="name" autocomplete="name" placeholder="ชื่อของคุณ" required />
+          <label for="register-email">อีเมล</label>
+          <input id="register-email" name="email" type="email" autocomplete="email" placeholder="you@example.com"
+            required />
+          <label for="register-password">รหัสผ่าน <span class="label-hint">(อย่างน้อย 8 ตัว มีพิมพ์ใหญ่ &
+              สัญลักษณ์)</span></label>
+          <input id="register-password" name="password" type="password" autocomplete="new-password"
+            placeholder="เช่น StudyBuddy!1" required />
+          <button class="button button-primary submit-button" type="submit">สร้างบัญชี <span
+              aria-hidden="true">↗</span></button>
+        </form>
 
-          <form id="register-form" class="form-stack hidden">
-            <label for="register-name">ชื่อที่ใช้แสดง</label>
-            <input id="register-name" name="name" autocomplete="name" placeholder="ชื่อของคุณ" required />
-            <label for="register-email">อีเมล</label>
-            <input id="register-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
-            <label for="register-password">รหัสผ่าน <span class="label-hint">(อย่างน้อย 8 ตัว มีพิมพ์ใหญ่ & สัญลักษณ์)</span></label>
-            <input id="register-password" name="password" type="password" autocomplete="new-password" placeholder="เช่น StudyBuddy!1" required />
-            <button class="button button-primary submit-button" type="submit">สร้างบัญชี <span aria-hidden="true">↗</span></button>
-          </form>
-
-          <p id="auth-message" class="message" role="status" aria-live="polite"></p>
-          <p class="privacy-note"><span aria-hidden="true">⌑</span> ระบบเชื่อมต่อกับ 5 Microservices อย่างปลอดภัย</p>
-        </section>
+        <p id="auth-message" class="message" role="status" aria-live="polite"></p>
+        <p class="privacy-note"><span aria-hidden="true">⌑</span> พื้นที่เล็ก ๆ สำหรับการเรียนรู้ที่ยิ่งใหญ่กว่าเดิม</p>
       </section>
+    </section>
 
-      <!-- 2. Workspace View (Logged in) -->
-      <section id="workspace-view" class="workspace hidden">
+    <div class="learning-strip" id="learning-strip">
+      <div><b>01</b><span>เลือกวิชาที่สนใจ<small>เริ่มจากสิ่งที่อยากเรียนรู้</small></span></div>
+      <div><b>02</b><span>พบกลุ่มของคุณ<small>หาเพื่อนที่มีเป้าหมายเดียวกัน</small></span></div>
+      <div><b>03</b><span>เติบโตไปด้วยกัน<small>นัดหมาย แล้วเริ่มเรียนรู้</small></span></div><span class="strip-star"
+        aria-hidden="true">✳</span>
+    </div>
+    <!-- 2. Workspace View (Logged in) -->
+    <section id="workspace-view" class="workspace hidden">
+      <aside class="workspace-rail">
+        <div class="rail-title"><span aria-hidden="true">✳</span>
+          <p>พื้นที่ของคุณ<small>MY OBSERVATORY</small></p>
+        </div>
         <!-- Navigation Tabs -->
         <nav class="nav-tabs" role="tablist" aria-label="เมนูหลัก">
           <button id="tab-groups" class="nav-tab active" type="button" role="tab" aria-selected="true">
-            <span class="tab-icon">👥</span> กลุ่มอ่านหนังสือ
+            <span class="tab-icon">◎</span> กลุ่มอ่านหนังสือ
           </button>
           <button id="tab-requests" class="nav-tab" type="button" role="tab" aria-selected="false">
-            <span class="tab-icon">📋</span> คำขอเข้าร่วมกลุ่ม
+            <span class="tab-icon">↗</span> คำขอเข้าร่วมกลุ่ม
             <span id="requests-badge" class="tab-badge hidden">0</span>
           </button>
           <button id="tab-profile" class="nav-tab" type="button" role="tab" aria-selected="false">
-            <span class="tab-icon">👤</span> โปรไฟล์และวิชา
+            <span class="tab-icon">✎</span> โปรไฟล์และวิชา
           </button>
         </nav>
 
+        <div class="rail-note"><span>FIELD NOTE / 01</span>
+          <p>คำถามที่ยังไม่เข้าใจ<br>อาจเป็นจุดเริ่มต้น<br>ของเพื่อนใหม่</p><i aria-hidden="true">↗</i>
+        </div>
+      </aside>
+      <div class="workspace-main">
         <!-- Tab Content 1: Groups View -->
         <div id="content-groups" class="tab-content">
           <div class="content-header">
             <div>
-              <div class="eyebrow"><span class="eyebrow-line"></span> STUDY SESSIONS</div>
-              <h2>ค้นหาและสร้างกลุ่มอ่านหนังสือ</h2>
+              <div class="eyebrow"><span class="eyebrow-line"></span> EXPLORE YOUR ORBIT</div>
+              <h2>หาวงโคจรที่ใช่<br><em>แล้วไปต่อด้วยกัน</em></h2>
               <p class="muted">หากลุ่มที่ตรงกับวิชาที่คุณสนใจ หรือสร้างนัดหมายใหม่เพื่อหาเพื่อนอ่านด้วยกัน</p>
             </div>
             <button id="open-create-group-btn" class="button button-primary" type="button">
@@ -141,7 +190,8 @@
             <form id="group-search-form" class="group-filter-form">
               <div class="filter-input-wrap">
                 <span class="filter-icon" aria-hidden="true">⌕</span>
-                <input id="group-search-input" type="text" placeholder="ค้นหาตามชื่อวิชา เช่น ชีววิทยา, แคลคูลัส..." />
+                <input id="group-search-input" aria-label="ค้นหากลุ่มตามวิชา" type="text"
+                  placeholder="ค้นหาตามชื่อวิชา เช่น ชีววิทยา, แคลคูลัส..." />
               </div>
               <label class="checkbox-label">
                 <input id="group-search-open-only" type="checkbox" checked />
@@ -152,6 +202,8 @@
             </form>
           </div>
 
+          <div class="list-heading"><span>กลุ่มอ่านหนังสือ</span><span id="group-result-count"
+              aria-live="polite">กำลังค้นหา...</span></div>
           <!-- Group Cards Grid -->
           <div id="groups-list" class="groups-grid" aria-live="polite">
             <div class="loading-state">กำลังโหลดรายการกลุ่ม...</div>
@@ -162,7 +214,7 @@
         <div id="content-requests" class="tab-content hidden">
           <div class="content-header">
             <div>
-              <div class="eyebrow"><span class="eyebrow-line"></span> MEMBERSHIP MANAGEMENT</div>
+              <div class="eyebrow"><span class="eyebrow-line"></span> YOUR INVITATIONS</div>
               <h2>จัดการคำขอเข้าร่วมกลุ่ม</h2>
               <p class="muted">สำหรับเจ้าของกลุ่ม: ตรวจสอบและอนุมัติเพื่อนที่ต้องการเข้าร่วมกลุ่มของคุณ</p>
             </div>
@@ -179,21 +231,26 @@
 
         <!-- Tab Content 3: Profile & Subjects View -->
         <div id="content-profile" class="tab-content hidden">
+          <header class="profile-page-intro">
+            <span class="eyebrow">YOUR STUDY PROFILE</span>
+            <h2>โปรไฟล์และวิชาที่สนใจ</h2>
+            <p>จัดการข้อมูลของคุณและเลือกวิชาที่อยากเรียนรู้ร่วมกับเพื่อน</p>
+          </header>
           <div class="workspace-grid">
             <!-- Profile Subjects Panel -->
             <section class="panel profile-panel" aria-labelledby="profile-title">
               <div class="panel-heading">
                 <div>
-                  <span class="panel-kicker">MY PROFILE</span>
-                  <h3 id="profile-title">พื้นที่เรียนรู้ของฉัน</h3>
+                  <span class="panel-kicker">YOUR FIELD NOTES</span>
+                  <h3 id="profile-title">ข้อมูลส่วนตัว</h3>
                 </div>
                 <span class="panel-icon" aria-hidden="true">✎</span>
               </div>
-              <p class="muted">ระบุวิชาที่กำลังเรียน เพื่อให้เพื่อนค้นหาคุณเจอได้ง่ายขึ้น</p>
+              <p class="muted">ข้อมูลพื้นฐานของบัญชีที่ใช้ใน Study Buddy</p>
 
               <div class="profile-details">
                 <div>
-                  <span>ชื่อผู้ใช้</span>
+                  <span>ชื่อที่แสดง</span>
                   <strong id="profile-name">—</strong>
                 </div>
                 <div>
@@ -206,27 +263,33 @@
                 </div>
               </div>
 
+              <div class="subjects-section">
+              <div class="subjects-section-heading"><span class="panel-kicker">MY SUBJECTS</span><h4>วิชาที่ฉันสนใจ</h4><p class="muted">เพิ่มวิชาที่กำลังเรียน วิชาละหนึ่งบรรทัด เพื่อนจะค้นหาคุณเจอ</p></div>
               <form id="subjects-form" class="form-stack">
-                <label for="subjects-input">วิชาที่สนใจ <span class="label-hint">(หนึ่งวิชาต่อหนึ่งบรรทัด)</span></label>
-                <textarea id="subjects-input" rows="5" placeholder="แคลคูลัส&#10;ชีววิทยา&#10;การเขียนโปรแกรม"></textarea>
-                <button class="button button-primary" type="submit">บันทึกรายวิชา <span aria-hidden="true">↗</span></button>
+                <label for="subjects-input">รายชื่อวิชา</label>
+                <textarea id="subjects-input" rows="5"
+                  placeholder="แคลคูลัส&#10;ชีววิทยา&#10;การเขียนโปรแกรม"></textarea>
+                <button class="button button-primary" type="submit">บันทึกรายวิชา <span
+                    aria-hidden="true">↗</span></button>
               </form>
               <p id="profile-message" class="message" role="status" aria-live="polite"></p>
+              </div>
             </section>
 
             <!-- Search Classmates Panel -->
             <section class="panel search-panel" aria-labelledby="search-classmates-title">
               <div class="panel-heading">
                 <div>
-                  <span class="panel-kicker">FIND CLASSMATES</span>
-                  <h3 id="search-classmates-title">ค้นหาเพื่อนตามวิชา</h3>
+                  <span class="panel-kicker">PEOPLE IN YOUR ORBIT</span>
+                  <h3 id="search-classmates-title">หาเพื่อนเรียนวิชาเดียวกัน</h3>
                 </div>
                 <span class="panel-icon panel-icon-green" aria-hidden="true">⌕</span>
               </div>
-              <p class="muted">ค้นหานักศึกษาคนอื่นที่สนใจวิชาเดียวกับคุณ</p>
+              <p class="muted">พิมพ์ชื่อวิชาเพื่อดูว่ามีใครสนใจเรียนเรื่องเดียวกับคุณ</p>
 
               <form id="classmates-search-form" class="search-form">
-                <input id="classmates-subject-input" placeholder="พิมพ์ชื่อวิชา เช่น ชีววิทยา" required />
+                <input id="classmates-subject-input" aria-label="ค้นหาเพื่อนตามวิชา"
+                  placeholder="พิมพ์ชื่อวิชา เช่น ชีววิทยา" required />
                 <button class="button button-dark" type="submit">ค้นหา</button>
               </form>
 
@@ -242,62 +305,68 @@
         </div>
 
         <footer class="workspace-footer">
-          <span>Study Buddy — ระบบจับกลุ่มอ่านหนังสือแบบกระจายศูนย์ (5 Microservices)</span>
-          <span>AUTH • PROFILE • GROUP • MEMBERSHIP • NOTIFICATION <b>✳</b></span>
+          <span>Study Buddy / เรียนรู้ในวงโคจรเดียวกัน</span>
+          <span>STAY CURIOUS. LEARN TOGETHER. <b>✳</b></span>
         </footer>
-      </section>
-
-      <!-- Create Group Modal -->
-      <div id="create-group-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-group-title">
-        <div class="modal-card">
-          <div class="modal-header">
-            <div>
-              <span class="mini-label">NEW STUDY SESSION</span>
-              <h3 id="modal-group-title">สร้างกลุ่มอ่านหนังสือใหม่</h3>
-            </div>
-            <button id="close-create-group-modal-btn" class="modal-close" type="button" aria-label="ปิดหน้าต่าง">✕</button>
-          </div>
-          <form id="create-group-form" class="form-stack">
-            <div class="form-row">
-              <div class="form-col">
-                <label for="group-subject">วิชา <span class="required">*</span></label>
-                <input id="group-subject" placeholder="เช่น ชีววิทยา, แคลคูลัส" required />
-              </div>
-              <div class="form-col">
-                <label for="group-max-members">จำนวนสมาชิกสูงสุด <span class="required">*</span></label>
-                <input id="group-max-members" type="number" min="2" max="50" value="5" required />
-              </div>
-            </div>
-
-            <label for="group-topic">หัวข้อที่อ่าน <span class="required">*</span></label>
-            <input id="group-topic" placeholder="เช่น ติวข้อสอบ Midterm เรื่อง Cell Biology" required />
-
-            <div class="form-row">
-              <div class="form-col">
-                <label for="group-starts-at">วันและเวลาที่นัดหมาย <span class="required">*</span></label>
-                <input id="group-starts-at" type="datetime-local" required />
-              </div>
-              <div class="form-col">
-                <label for="group-location">สถานที่ / ช่องทาง <span class="required">*</span></label>
-                <input id="group-location" placeholder="เช่น หอสมุดกลาง ชั้น 3, Discord" required />
-              </div>
-            </div>
-
-            <label for="group-description">รายละเอียดเพิ่มเติม <span class="label-hint">(ไม่บังคับ)</span></label>
-            <textarea id="group-description" rows="3" placeholder="ระบุเนื้อหาเพิ่มเติม หรือเอกสารที่ต้องเตรียมมา"></textarea>
-
-            <div class="modal-footer">
-              <button id="cancel-create-group-btn" class="button button-quiet" type="button">ยกเลิก</button>
-              <button class="button button-primary" type="submit">สร้างกลุ่มอ่านหนังสือ <span aria-hidden="true">↗</span></button>
-            </div>
-          </form>
-        </div>
       </div>
+    </section>
 
-      <!-- Toast Feedback -->
-      <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    </main>
+    <!-- Create Group Modal -->
+    <div id="create-group-modal" class="modal-overlay hidden" role="dialog" aria-modal="true"
+      aria-labelledby="modal-group-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div>
+            <span class="mini-label">NEW STUDY SESSION</span>
+            <h3 id="modal-group-title">สร้างกลุ่มอ่านหนังสือใหม่</h3>
+          </div>
+          <button id="close-create-group-modal-btn" class="modal-close" type="button"
+            aria-label="ปิดหน้าต่าง">✕</button>
+        </div>
+        <form id="create-group-form" class="form-stack">
+          <div class="form-row">
+            <div class="form-col">
+              <label for="group-subject">วิชา <span class="required">*</span></label>
+              <input id="group-subject" placeholder="เช่น ชีววิทยา, แคลคูลัส" required />
+            </div>
+            <div class="form-col">
+              <label for="group-max-members">จำนวนสมาชิกสูงสุด <span class="required">*</span></label>
+              <input id="group-max-members" type="number" min="2" max="50" value="5" required />
+            </div>
+          </div>
 
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+          <label for="group-topic">หัวข้อที่อ่าน <span class="required">*</span></label>
+          <input id="group-topic" placeholder="เช่น ติวข้อสอบ Midterm เรื่อง Cell Biology" required />
+
+          <div class="form-row">
+            <div class="form-col">
+              <label for="group-starts-at">วันและเวลาที่นัดหมาย <span class="required">*</span></label>
+              <input id="group-starts-at" type="datetime-local" required />
+            </div>
+            <div class="form-col">
+              <label for="group-location">สถานที่ / ช่องทาง <span class="required">*</span></label>
+              <input id="group-location" placeholder="เช่น หอสมุดกลาง ชั้น 3, Discord" required />
+            </div>
+          </div>
+
+          <label for="group-description">รายละเอียดเพิ่มเติม <span class="label-hint">(ไม่บังคับ)</span></label>
+          <textarea id="group-description" rows="3"
+            placeholder="ระบุเนื้อหาเพิ่มเติม หรือเอกสารที่ต้องเตรียมมา"></textarea>
+
+          <div class="modal-footer">
+            <button id="cancel-create-group-btn" class="button button-quiet" type="button">ยกเลิก</button>
+            <button class="button button-primary" type="submit">สร้างกลุ่มอ่านหนังสือ <span
+                aria-hidden="true">↗</span></button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Toast Feedback -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </main>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
 </html>
