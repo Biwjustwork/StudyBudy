@@ -56,7 +56,15 @@ export function createApp(store: NotificationStore, tokenSecret: string, service
 
   app.get("/api/notifications", (request: AuthenticatedRequest, response) => {
     response.setHeader("Cache-Control", "no-store");
-    return response.json(store.list(request.userId as string));
+    const rawLimit = request.query.limit;
+    const rawOffset = request.query.offset;
+    const limit = rawLimit === undefined ? 20 : Number(rawLimit);
+    const offset = rawOffset === undefined ? 0 : Number(rawOffset);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100
+      || !Number.isInteger(offset) || offset < 0) {
+      return response.status(400).json({ error: "validation_error", message: "limit must be 1–100 and offset must be a non-negative integer" });
+    }
+    return response.json(store.list(request.userId as string, offset, limit));
   });
 
   app.patch("/api/notifications/:id/read", async (request: AuthenticatedRequest, response) => {

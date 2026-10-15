@@ -12,10 +12,25 @@ async function start() {
   if (!serviceToken?.trim()) throw new Error("NOTIFY_SERVICE_TOKEN must be set");
   if (!dataFile.trim()) throw new Error("NOTIFICATION_DATA_FILE must be a non-empty path");
   const store = await NotificationStore.open(resolve(dataFile));
+  const pruneExpiredReadNotifications = async () => {
+    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    try {
+      const removed = await store.pruneReadBefore(cutoff);
+      if (removed > 0) console.log(`Removed ${removed} read notification(s) older than 90 days`);
+    } catch {
+      console.error("Notification retention cleanup failed; saved data is preserved and cleanup will retry.");
+    }
+  };
+  await pruneExpiredReadNotifications();
+  const retentionTimer = setInterval(() => { void pruneExpiredReadNotifications(); }, 24 * 60 * 60 * 1000);
+  retentionTimer.unref();
   const server = createApp(store, tokenSecret, serviceToken).listen(port, () => {
     console.log(`Notification service listening on port ${port}`);
   });
-  const stop = () => server.close(() => { process.exitCode = 0; });
+  const stop = () => {
+    clearInterval(retentionTimer);
+    server.close(() => { process.exitCode = 0; });
+  };
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
 }

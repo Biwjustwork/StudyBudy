@@ -50,7 +50,7 @@ npm run dev
 |---|---|---|
 | GET | `/health` | public; `200 {status:"ok",service:"notification"}` |
 | POST | `/internal/notifications` | `X-Service-Token`; สร้างครั้งแรก `201`, retry เดิม `200` |
-| GET | `/api/notifications` | Bearer JWT; array เฉพาะ token user ใหม่ไปเก่า |
+| GET | `/api/notifications?limit=20&offset=0` | Bearer JWT; `{items, unreadCount, hasMore, nextOffset}`; ค่าเริ่มต้น 20 รายการ, limit 1–100 |
 | PATCH | `/api/notifications/:id/read` | Bearer JWT; ของตน `200`, ของผู้อื่น `403`, ไม่มี `404` |
 
 JWT ต้องเป็น HS256 มี `userId` string ที่ไม่ว่างและ `exp` ที่ยังไม่หมดอายุ. ไม่รับตัวตนจาก body/query ของ public API. Errors ใช้ `{ "error": "error_code", "message": "description" }`; malformed JSON `400`, body เกิน 32 KiB `413`, token หาย/ผิด `401`, ข้อมูล event ผิด `400`, event key เดิมแต่ message ต่าง `409`, ปัญหาเขียนไฟล์ `500` โดยไม่เปิดเผยข้อมูลลับ.
@@ -88,6 +88,8 @@ JWT ต้องเป็น HS256 มี `userId` string ที่ไม่ว�
 Event key คือ `(userId, relatedId, type)`; retry payload เดิมคืน notification เดิมด้วย `200` รวมถึงสถานะอ่านแล้ว ห้ามเปลี่ยน message ระหว่าง retry; หากต่างจะตอบ `409` และไม่เขียนทับ. การส่งซ้ำพร้อมกันถูกจัดคิวและบันทึกเพียงรายการเดียว.
 
 JSON เป็น array แยกของ service นี้เท่านั้น เขียนไฟล์ชั่วคราวแล้ว rename โดยจัดคิวการเขียน และเผยแพร่ state ใน memory หลังเขียนสำเร็จ. เขียนไม่สำเร็จจะไม่แสดงข้อมูลที่ไม่ได้บันทึก และ retry ได้. ไฟล์เสียหรือมี ID/event ซ้ำทำให้ startup ล้มเหลวโดยไม่ล้างข้อมูลเดิม. ใช้ได้เพียงหนึ่ง process/replica ต่อไฟล์ข้อมูล ตามแผนทีม.
+
+หน้าแจ้งเตือนโหลดครั้งละ 20 รายการและมีปุ่ม “ดูเพิ่มเติม”; `unreadCount` ใน response ใช้แสดงยอดที่ยังไม่อ่านทั้งหมด. Service ลบเฉพาะรายการที่อ่านแล้วและสร้างไว้เกิน 90 วัน โดยตรวจตอนเริ่มทำงานและทุก 24 ชั่วโมง รายการที่ยังไม่อ่านจะเก็บไว้.
 
 ## Docker
 

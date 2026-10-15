@@ -126,6 +126,13 @@ type NotificationItem = {
   readAt: string | null;
 };
 
+type NotificationPage = {
+  items: NotificationItem[];
+  unreadCount: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+};
+
 // ================= Service URLs & Storage =================
 const authUrl = import.meta.env.VITE_AUTH_URL ?? 'http://localhost:3001';
 const profileUrl = import.meta.env.VITE_PROFILE_URL ?? 'http://localhost:3002';
@@ -143,6 +150,8 @@ const currentUserId = () => sessionStorage.getItem(storageKeys.userId);
 
 // Timer for background notification polling
 let notificationPollTimer: number | null = null;
+let notificationOffset = 0;
+let notificationHasMore = false;
 
 // ================= DOM Helper =================
 const byId = <T extends HTMLElement>(id: string) => {
@@ -165,6 +174,7 @@ const notiToggleBtn = byId<HTMLButtonElement>('noti-toggle-btn');
 const notiDropdown = byId<HTMLElement>('noti-dropdown');
 const notiBadge = byId<HTMLElement>('noti-badge');
 const notiList = byId<HTMLElement>('noti-list');
+const notiLoadMoreBtn = byId<HTMLButtonElement>('noti-load-more-btn');
 const notiRefreshBtn = byId<HTMLButtonElement>('noti-refresh-btn');
 const notiCloseBtn = byId<HTMLButtonElement>('noti-close-btn');
 const notiUnreadText = byId<HTMLElement>('noti-unread-text');
@@ -784,8 +794,8 @@ async function handleDecision(requestId: string, action: 'approve' | 'reject') {
 async function pollNotifications() {
   if (!token()) return;
   try {
-    const list = await apiRequest<NotificationItem[]>(notifyUrl, '/api/notifications', { method: 'GET' });
-    const unread = list.filter((n) => !n.read).length;
+    const page = await apiRequest<NotificationPage>(notifyUrl, '/api/notifications?limit=1&offset=0', { method: 'GET' });
+    const unread = page.unreadCount;
     if (unread > 0) {
       notiBadge.textContent = unread > 99 ? '99+' : String(unread);
       notiBadge.classList.remove('hidden');
@@ -801,31 +811,65 @@ async function pollNotifications() {
 
 async function loadNotifications() {
   try {
-    const list = await apiRequest<NotificationItem[]>(notifyUrl, '/api/notifications', { method: 'GET' });
-    const unread = list.filter((n) => !n.read).length;
-
-    if (unread > 0) {
-      notiBadge.textContent = unread > 99 ? '99+' : String(unread);
-      notiBadge.classList.remove('hidden');
-      notiUnreadText.textContent = `มีข้อความใหม่ ${unread} รายการ`;
-    } else {
-      notiBadge.classList.add('hidden');
-      notiUnreadText.textContent = 'ไม่มีข้อความใหม่';
-    }
-
-    if (list.length === 0) {
+    notificationOffset = 0;
+    notificationHasMore = false;
+    notiLoadMoreBtn.classList.add('hidden');
+    notiList.innerHTML = '';
+    const page = await apiRequest<NotificationPage>(notifyUrl, '/api/notifications?limit=20&offset=0', { method: 'GET' });
+    updateNotificationUnread(page.unreadCount);
+    notificationHasMore = page.hasMore;
+    notificationOffset = page.nextOffset ?? page.items.length;
+    notiLoadMoreBtn.classList.toggle('hidden', !notificationHasMore);
+    if (page.items.length === 0) {
       notiList.innerHTML = '<div class="empty-state-compact">ไม่มีการแจ้งเตือนในระบบ</div>';
       return;
     }
+    appendNotificationItems(page.items);
+  } catch {
+    notiList.innerHTML = '<div class="empty-state-compact">ไม่สามารถโหลดการแจ้งเตือนได้</div>';
+  }
+}
 
-    notiList.innerHTML = list
-      .map((item) => {
-        const isApproved = item.type === 'request_approved';
-        const badgeType = isApproved
-          ? '<span class="noti-badge-type approved">อนุมัติแล้ว</span>'
-          : '<span class="noti-badge-type rejected">ไม่ได้รับการอนุมัติ</span>';
+async function loadMoreNotifications() {
+  if (!notificationHasMore || notiLoadMoreBtn.disabled) return;
+  notiLoadMoreBtn.disabled = true;
+  notiLoadMoreBtn.textContent = 'กำลังโหลด…';
+  try {
+    const page = await apiRequest<NotificationPage>(notifyUrl,
+      `/api/notifications?limit=20&offset=${notificationOffset}`, { method: 'GET' });
+    updateNotificationUnread(page.unreadCount);
+    appendNotificationItems(page.items);
+    notificationHasMore = page.hasMore;
+    notificationOffset = page.nextOffset ?? notificationOffset;
+    notiLoadMoreBtn.classList.toggle('hidden', !notificationHasMore);
+  } catch {
+    showToast('โหลดการแจ้งเตือนเพิ่มเติมไม่สำเร็จ กรุณาลองอีกครั้ง', true);
+  } finally {
+    notiLoadMoreBtn.disabled = false;
+    notiLoadMoreBtn.textContent = 'ดูเพิ่มเติม';
+  }
+}
 
-        return `
+function updateNotificationUnread(unread: number) {
+  if (unread > 0) {
+    notiBadge.textContent = unread > 99 ? '99+' : String(unread);
+    notiBadge.classList.remove('hidden');
+    notiUnreadText.textContent = `มีข้อความใหม่ ${unread} รายการ`;
+  } else {
+    notiBadge.classList.add('hidden');
+    notiUnreadText.textContent = 'ไม่มีข้อความใหม่';
+  }
+}
+
+function appendNotificationItems(list: NotificationItem[]) {
+  notiList.insertAdjacentHTML('beforeend', list
+    .map((item) => {
+      const isApproved = item.type === 'request_approved';
+      const badgeType = isApproved
+        ? '<span class="noti-badge-type approved">อนุมัติแล้ว</span>'
+        : '<span class="noti-badge-type rejected">ไม่ได้รับการอนุมัติ</span>';
+
+      return `
           <div class="noti-item ${item.read ? '' : 'unread'}" data-id="${item.id}">
             <div class="noti-meta">
               ${badgeType}
@@ -839,19 +883,16 @@ async function loadNotifications() {
             }
           </div>
         `;
-      })
-      .join('');
+    })
+    .join(''));
 
-    // Mark as read clicks
-    notiList.querySelectorAll('.noti-mark-read-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
-        if (id) void markNotificationAsRead(id);
-      });
+  // Mark as read clicks
+  notiList.querySelectorAll('.noti-mark-read-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+      if (id) void markNotificationAsRead(id);
     });
-  } catch {
-    notiList.innerHTML = '<div class="empty-state-compact">ไม่สามารถโหลดการแจ้งเตือนได้</div>';
-  }
+  });
 }
 
 async function markNotificationAsRead(notificationId: string) {
@@ -1026,6 +1067,10 @@ function setupEventListeners() {
 
   notiRefreshBtn.addEventListener('click', () => {
     void loadNotifications();
+  });
+
+  notiLoadMoreBtn.addEventListener('click', () => {
+    void loadMoreNotifications();
   });
 
   document.addEventListener('click', (e) => {

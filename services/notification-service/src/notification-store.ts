@@ -16,6 +16,13 @@ export type Notification = NotificationEvent & {
   readAt: string | null;
 };
 
+export type NotificationPage = {
+  items: Notification[];
+  unreadCount: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+};
+
 export class NotificationConflictError extends Error {}
 
 function eventKey(event: NotificationEvent): string {
@@ -55,12 +62,19 @@ export class NotificationStore {
     return store;
   }
 
-  list(userId: string): Notification[] {
+  list(userId: string, offset = 0, limit = 20): NotificationPage {
     // Reverse insertion order makes events created in the same millisecond deterministic.
-    return [...this.notifications.values()].reverse()
+    const matching = [...this.notifications.values()].reverse()
       .filter((notification) => notification.userId === userId)
-      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-      .map((notification) => structuredClone(notification));
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const selected = matching.slice(offset, offset + limit);
+    const hasMore = offset + selected.length < matching.length;
+    return {
+      items: selected.map((notification) => structuredClone(notification)),
+      unreadCount: matching.filter((notification) => !notification.read).length,
+      hasMore,
+      nextOffset: hasMore ? offset + selected.length : null,
+    };
   }
 
   async create(event: NotificationEvent): Promise<{ created: boolean; notification: Notification }> {
@@ -96,6 +110,25 @@ export class NotificationStore {
       await this.persist([...next.values()]);
       this.notifications = next;
       return { status: "ok", notification: structuredClone(updated) };
+    });
+  }
+
+  async pruneReadBefore(cutoff: Date): Promise<number> {
+    const cutoffTime = cutoff.getTime();
+    if (!Number.isFinite(cutoffTime)) throw new Error("Notification retention cutoff must be a valid date");
+    return this.serialize(async () => {
+      const next = new Map(this.notifications);
+      let removed = 0;
+      for (const [id, notification] of next) {
+        if (notification.read && Date.parse(notification.createdAt) < cutoffTime) {
+          next.delete(id);
+          removed += 1;
+        }
+      }
+      if (removed === 0) return 0;
+      await this.persist([...next.values()]);
+      this.notifications = next;
+      return removed;
     });
   }
 

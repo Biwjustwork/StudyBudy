@@ -6,8 +6,11 @@ const loadButton = document.querySelector("#load");
 const listElement = document.querySelector("#notifications");
 const statusElement = document.querySelector("#status");
 const countElement = document.querySelector("#count");
+const loadMoreButton = document.querySelector("#load-more");
 let revision = 0;
 let loadRevision = 0;
+let offset = 0;
+let hasMore = false;
 apiInput.value = window.location.origin === "null" ? "" : window.location.origin;
 
 function status(message, error = false) {
@@ -21,6 +24,7 @@ function reset() {
   listElement.replaceChildren();
   countElement.textContent = "0 รายการ";
   loadButton.disabled = false;
+  loadMoreButton.classList.add("hidden");
   status("เชื่อมต่อบัญชีเพื่อโหลดรายการ");
 }
 
@@ -52,10 +56,11 @@ async function request(config, path, method = "GET") {
   return response.json();
 }
 
-function render(items, config, currentRevision) {
-  listElement.replaceChildren();
-  countElement.textContent = `${items.length} รายการ · ยังไม่อ่าน ${items.filter((item) => !item.read).length}`;
-  status(items.length ? "เรียงจากรายการล่าสุด" : "ยังไม่มีการแจ้งเตือน");
+function render(items, config, currentRevision, unreadCount, append = false) {
+  if (!append) listElement.replaceChildren();
+  const displayedCount = append ? offset + items.length : items.length;
+  countElement.textContent = `${displayedCount} รายการ · ยังไม่อ่าน ${unreadCount}`;
+  status(displayedCount ? "เรียงจากรายการล่าสุด" : "ยังไม่มีการแจ้งเตือน");
   for (const item of items) {
     const row = document.createElement("li");
     row.className = `notification${item.read ? " read" : ""}`;
@@ -105,15 +110,45 @@ async function load() {
   status("กำลังโหลดการแจ้งเตือน...");
   try {
     const config = connection();
-    const items = await request(config, "/api/notifications");
-    if (!Array.isArray(items)) throw new Error("ข้อมูลจาก service ไม่อยู่ในรูปแบบรายการแจ้งเตือน");
-    if (revision === currentRevision && loadRevision === currentLoad) render(items, config, currentRevision);
+    offset = 0;
+    hasMore = false;
+    const page = await request(config, "/api/notifications?limit=20&offset=0");
+    if (!page || !Array.isArray(page.items)) throw new Error("ข้อมูลจาก service ไม่อยู่ในรูปแบบรายการแจ้งเตือน");
+    if (revision === currentRevision && loadRevision === currentLoad) {
+      offset = page.items.length;
+      hasMore = page.hasMore;
+      loadMoreButton.classList.toggle("hidden", !hasMore);
+      render(page.items, config, currentRevision, page.unreadCount);
+    }
   } catch (error) {
     if (revision === currentRevision && loadRevision === currentLoad) status(error instanceof TypeError ? "เชื่อมต่อ service ไม่สำเร็จ กรุณาตรวจสอบ API URL" : error.message, true);
   } finally {
     if (revision === currentRevision && loadRevision === currentLoad) loadButton.disabled = false;
   }
 }
+
+async function loadMore() {
+  if (!hasMore || loadMoreButton.disabled) return;
+  const currentRevision = revision;
+  loadMoreButton.disabled = true;
+  try {
+    const config = connection();
+    const page = await request(config, `/api/notifications?limit=20&offset=${offset}`);
+    if (!page || !Array.isArray(page.items)) throw new Error("ข้อมูลจาก service ไม่อยู่ในรูปแบบรายการแจ้งเตือน");
+    if (revision === currentRevision) {
+      offset = page.nextOffset ?? offset;
+      hasMore = page.hasMore;
+      render(page.items, config, currentRevision, page.unreadCount, true);
+      loadMoreButton.classList.toggle("hidden", !hasMore);
+    }
+  } catch (error) {
+    if (revision === currentRevision) status(error instanceof TypeError ? "เชื่อมต่อ service ไม่สำเร็จ กรุณาตรวจสอบ API URL" : error.message, true);
+  } finally {
+    loadMoreButton.disabled = false;
+  }
+}
+
+loadMoreButton.addEventListener("click", () => void loadMore());
 
 document.querySelector("#connection-form").addEventListener("submit", (event) => {
   event.preventDefault();

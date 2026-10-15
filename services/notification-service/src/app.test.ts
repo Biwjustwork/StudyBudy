@@ -83,7 +83,7 @@ test("internal delivery rejects missing, wrong and user Bearer tokens", async ()
     method: "POST", headers: { Authorization: `Bearer ${token("user-a")}`, "Content-Type": "application/json" }, body: JSON.stringify(event),
   });
   assert.equal(bearerOnly.status, 401);
-  assert.deepEqual(await (await list()).json(), []);
+  assert.deepEqual((await (await list()).json()).items, []);
 });
 
 test("delivery validates all required fields and supported event types without saving", async () => {
@@ -91,7 +91,7 @@ test("delivery validates all required fields and supported event types without s
     { ...event, type: "other" }, { ...event, message: " " }, { ...event, relatedId: "" }, { ...event, message: "x".repeat(2001) }]) {
     assert.equal((await deliver(invalid)).status, 400, JSON.stringify(invalid));
   }
-  assert.deepEqual(await (await list()).json(), []);
+  assert.deepEqual((await (await list()).json()).items, []);
 });
 
 test("delivery trims text fields and supports rejected requests", async () => {
@@ -110,10 +110,31 @@ test("NOTI-02: list is newest first and contains only the token user's records",
   const second = await (await deliver({ ...event, relatedId: "request-2" })).json();
   const response = await list();
   assert.equal(response.status, 200);
-  const items = await response.json();
-  assert.deepEqual(items.map((item: { id: string }) => item.id), [second.id, first.id]);
-  assert.equal((await (await list("user-b", "?userId=user-a")).json()).length, 1);
-  assert.deepEqual(await (await list("user-with-no-events")).json(), []);
+  const page = await response.json();
+  assert.deepEqual(page.items.map((item: { id: string }) => item.id), [second.id, first.id]);
+  assert.equal(page.unreadCount, 2);
+  assert.equal(page.hasMore, false);
+  assert.deepEqual((await (await list("user-b", "?userId=user-a")).json()).items.length, 1);
+  assert.deepEqual((await (await list("user-with-no-events")).json()).items, []);
+});
+
+test("notification listing paginates in batches, validates query values and preserves the unread count", async () => {
+  for (let index = 0; index < 25; index += 1) {
+    await deliver({ ...event, relatedId: `request-${index}` });
+  }
+  const first = await (await list()).json();
+  assert.equal(first.items.length, 20);
+  assert.equal(first.unreadCount, 25);
+  assert.equal(first.hasMore, true);
+  assert.equal(first.nextOffset, 20);
+  const second = await (await list("user-a", `?limit=20&offset=${first.nextOffset}`)).json();
+  assert.equal(second.items.length, 5);
+  assert.equal(second.unreadCount, 25);
+  assert.equal(second.hasMore, false);
+  assert.equal(second.nextOffset, null);
+  for (const query of ["?limit=0", "?limit=101", "?offset=-1", "?offset=1.5", "?limit=nope"]) {
+    assert.equal((await list("user-a", query)).status, 400);
+  }
 });
 
 test("protected APIs reject malformed, expired, wrong-algorithm and incomplete JWTs", async () => {
@@ -138,15 +159,15 @@ test("NOTI-02: mark-read persists and repeating it preserves the original read t
   assert.equal(read.read, true);
   assert.ok(Number.isFinite(Date.parse(read.readAt)));
   assert.equal((await (await mark(created.id)).json()).readAt, read.readAt);
-  assert.equal((await (await list()).json())[0].read, true);
+  assert.equal((await (await list()).json()).items[0].read, true);
   assert.deepEqual(JSON.parse(await readFile(dataFile, "utf8")), [read]);
 });
 
 test("NOTI-03: another user cannot mark a notification or change its state", async () => {
   const created = await (await deliver()).json();
   assert.equal((await mark(created.id, "user-b")).status, 403);
-  assert.equal((await (await list()).json())[0].read, false);
-  assert.deepEqual(await (await list("user-b")).json(), []);
+  assert.equal((await (await list()).json()).items[0].read, false);
+  assert.deepEqual((await (await list("user-b")).json()).items, []);
 });
 
 test("mark-read returns JSON 404 for an unknown notification", async () => {
@@ -165,7 +186,7 @@ test("identical event retry returns the existing record without resetting read s
   const body = await retry.json();
   assert.equal(body.id, created.id);
   assert.equal(body.read, true);
-  assert.equal((await (await list()).json()).length, 1);
+  assert.equal((await (await list()).json()).items.length, 1);
 });
 
 test("concurrent duplicate deliveries create one record and return one stable ID", async () => {
@@ -180,7 +201,7 @@ test("concurrent duplicate deliveries create one record and return one stable ID
 test("retry with a conflicting message returns 409 and preserves the saved event", async () => {
   await deliver();
   assert.equal((await deliver({ ...event, message: "different message" })).status, 409);
-  assert.equal((await (await list()).json())[0].message, event.message);
+  assert.equal((await (await list()).json()).items[0].message, event.message);
 });
 
 test("DATA-01: create, mark-read and retry survive reopening the JSON repository", async () => {
@@ -196,7 +217,7 @@ test("DATA-01: create, mark-read and retry survive reopening the JSON repository
   const body = await response.json();
   assert.equal(body.id, created.id);
   assert.equal(body.read, true);
-  assert.equal((await (await list()).json()).length, 1);
+  assert.equal((await (await list()).json()).items.length, 1);
 });
 
 test("failed writes return a safe error, leave no phantom notification, and allow a later retry", async () => {
@@ -207,11 +228,34 @@ test("failed writes return a safe error, leave no phantom notification, and allo
   const failed = await deliver();
   assert.equal(failed.status, 500);
   assert.deepEqual(await failed.json(), { error: "internal_error", message: "An unexpected error occurred" });
-  assert.deepEqual(await (await list()).json(), []);
+  assert.deepEqual((await (await list()).json()).items, []);
   await rm(folder);
   await rename(backup, folder);
   assert.equal((await deliver()).status, 201);
-  assert.equal((await (await list()).json()).length, 1);
+  assert.equal((await (await list()).json()).items.length, 1);
+});
+
+test("retention removes only read notifications older than 90 days and persists the cleanup", async () => {
+  const oldRead = await (await deliver({ ...event, relatedId: "old-read" })).json();
+  const oldUnread = await (await deliver({ ...event, relatedId: "old-unread" })).json();
+  const recentRead = await (await deliver({ ...event, relatedId: "recent-read" })).json();
+  await mark(oldRead.id);
+  await mark(recentRead.id);
+  const records = JSON.parse(await readFile(dataFile, "utf8")) as Array<Record<string, unknown>>;
+  const now = Date.now();
+  for (const record of records) {
+    if (record.id === oldRead.id || record.id === oldUnread.id) {
+      record.createdAt = new Date(now - 100 * 24 * 60 * 60 * 1000).toISOString();
+    }
+    if (record.id === recentRead.id) record.createdAt = new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString();
+  }
+  await writeFile(dataFile, JSON.stringify(records));
+  store = await NotificationStore.open(dataFile);
+  const removed = await store.pruneReadBefore(new Date(now - 90 * 24 * 60 * 60 * 1000));
+  assert.equal(removed, 1);
+  const persisted = JSON.parse(await readFile(dataFile, "utf8")) as Array<{ id: string }>;
+  assert.deepEqual(new Set(persisted.map((record) => record.id)), new Set([oldUnread.id, recentRead.id]));
+  assert.deepEqual(new Set(store.list("user-a", 0, 20).items.map((record) => record.id)), new Set([oldUnread.id, recentRead.id]));
 });
 
 test("invalid or duplicate saved records stop startup without overwriting the file", async () => {

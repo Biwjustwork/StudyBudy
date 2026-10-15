@@ -3,6 +3,9 @@
 ## สิ่งที่ส่งมอบวันนี้
 
 - Notification API, หน้าแจ้งเตือน, JSON store, API/unit tests, Dockerfile และ CI เฉพาะ service.
+- หน้าแจ้งเตือนโหลดทีละ 20 รายการและมี “ดูเพิ่มเติม”; API ส่ง `unreadCount` เพื่อคงยอด unread ทั้งหมด
+- ลบเฉพาะรายการที่อ่านแล้วและ `createdAt` เกิน 90 วัน ตรวจตอน service เริ่มและทุก 24 ชั่วโมง; รายการยังไม่อ่านไม่ถูกลบ
+- ปรับสัญญา `GET /api/notifications` เป็น paginated response `{ items, unreadCount, hasMore, nextOffset }`; อัปเดต consumer ทั้ง frontend และหน้า `/notifications.html`
 - โฟลเดอร์ `services/notification-service/` อยู่ในโฟลเดอร์ services เดียวกับ Profile/Group/Membership; workflow อยู่ `.github/workflows/notification-service.yml`.
 - `API_CONTRACT.md` กลางส่วน 7 เพิ่มรายละเอียด internal token, response fields และ retry; ตอนรวม branch ให้คงการปรับ JSON storage เดิมของ Auth ไว้.
 - การประกอบชุดรันรวม, E2E ทุก service และ Docker Hub release เป็นขั้นตอนของทีมหลังรวมโค้ด.
@@ -56,6 +59,7 @@ Notification deduplicate ด้วย `(userId, relatedId, type)` และไ�
 |---|---|
 | NOTI-01 | Membership อนุมัติ/ปฏิเสธแล้ว event ไปถึง Notification พร้อม requesterId/requestId ที่ถูกต้อง |
 | NOTI-02 | ผู้ขอเห็นเฉพาะของตน, ใหม่ไปเก่า, mark-read แล้วเปิดใหม่ยังอ่านแล้ว |
+| NOTI-04 | 20 รายการแรก, โหลดหน้าถัดไป, ยอด unread ทั้งหมด และลบเฉพาะ read เกิน 90 วัน |
 | NOTI-03 | อีกคน mark ไม่ได้ (`403`); list ของอีกคนต้องไม่เปิดเผยรายการของผู้ขอ |
 | Retry | ส่ง event เดิมซ้ำ/พร้อมกัน/หลัง timeout มีรายการเดียวและไม่เปลี่ยน read state |
 | DATA-01 | สร้างรายการและ mark-read แล้ว recreate container ด้วย volume เดิมยังเห็นข้อมูล |

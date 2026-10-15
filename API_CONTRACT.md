@@ -136,7 +136,7 @@ Membership Service เก็บคำขอในไฟล์ JSON ของต�
 Notification Service เก็บรายการแจ้งเตือนในไฟล์ JSON ของตนเองตาม `NOTIFICATION_DATA_FILE`; Membership ส่ง event ผ่าน API ภายใน ไม่เขียนไฟล์ของ Notification โดยตรง
 
 - `POST /internal/notifications`: Membership Service เรียกด้วย `X-Service-Token`; body `{ "userId": "user-123", "type": "request_approved", "message": "คำขอเข้ากลุ่มได้รับอนุมัติ", "relatedId": "request-123" }`; สำเร็จ `201` คืน notification
-- `GET /api/notifications`: ต้องมี Bearer token; คืนเฉพาะรายการของ userId ใน token เรียงใหม่ไปเก่า
+- `GET /api/notifications?limit=20&offset=0`: ต้องมี Bearer token; คืนหน้ารายการเฉพาะ userId ใน token เรียงใหม่ไปเก่า; limit ค่าเริ่มต้น 20 (รับ 1–100), offset ค่าเริ่มต้น 0; response `{ "items": [], "unreadCount": 0, "hasMore": false, "nextOffset": null }`; `unreadCount` นับรายการยังไม่อ่านทั้งหมดของผู้ใช้
 - `PATCH /api/notifications/:id/read`: ทำเครื่องหมายอ่านแล้วได้เฉพาะ notification ของตน; สำเร็จ `200`, ไม่มีรายการตอบ `404`, เป็นของผู้อื่นตอบ `403`
 
 รายละเอียดสำหรับเชื่อม Membership → Notification (สมาชิก 4 และ 5):
@@ -147,6 +147,8 @@ Notification Service เก็บรายการแจ้งเตือน�
 - เพื่อรองรับ retry โดยไม่แจ้งซ้ำ ใช้ `(userId, relatedId, type)` เป็น event key: ครั้งแรกตอบ `201`; ส่ง payload เดิมซ้ำตอบ `200` พร้อม notification เดิมและคง read state; key เดิมแต่ message ต่างตอบ `409` โดยไม่เขียนทับ Membership ต้องถือทั้ง `200` และ `201` ว่าส่งสำเร็จ
 - Membership ต้องบันทึก event ที่ยังส่งไม่สำเร็จเพื่อ retry payload เดิมภายหลัง โดยไม่ตัดสินคำขอหรือเพิ่มสมาชิกซ้ำ; Notification เก็บเฉพาะ JSON ของตนผ่าน `NOTIFICATION_DATA_FILE` และ Docker volume แยก ใช้หนึ่ง process/replica ต่อไฟล์
 - `GET /api/notifications` คืนเฉพาะ userId ใน token เสมอ ไม่รับ userId จาก query; การพยายามดูของผู้อื่นด้วย query จึงไม่เปิดเผยรายการนั้น ส่วนการ mark รายการของผู้อื่นตอบ `403` ตามเดิม
+- หน้าการแจ้งเตือนโหลดครั้งละ 20 รายการ และขอหน้าถัดไปเมื่อผู้ใช้กด “ดูเพิ่มเติม”; badge แสดงจำนวนที่ยังไม่อ่านทั้งหมด
+- Notification Service ลบอัตโนมัติเฉพาะรายการที่อ่านแล้วและ `createdAt` เก่ากว่า 90 วัน ทำครั้งหนึ่งตอนเริ่ม service และตรวจซ้ำทุก 24 ชั่วโมง; รายการที่ยังไม่อ่านจะไม่ถูกลบตามนโยบายนี้
 
 ## 8. การเปลี่ยนสัญญา
 
