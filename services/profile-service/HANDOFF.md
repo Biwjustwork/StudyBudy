@@ -2,16 +2,16 @@
 
 ## ทำแล้ว
 
-- ตั้งโครง Profile & Subject Service ไว้ในโฟลเดอร์ `profile-service`
+- ย้าย Profile & Subject Service มาไว้ที่ `services/profile-service`
 - ทำ API อ่านโปรไฟล์และแก้รายการวิชาของผู้ใช้: `GET /api/users/:id` และ `PUT /api/users/:id`
 - ทำ API ค้นหาผู้ใช้ตามวิชา: `GET /api/users/search?subject=...`
 - เพิ่ม validation: วิชาต้องเป็นข้อความที่ไม่ว่าง ตัดช่องว่างหัวท้าย และไม่รับชื่อซ้ำโดยไม่นับตัวพิมพ์เล็ก/ใหญ่
 - ตรวจ Bearer JWT ที่มี claim `userId`; ผู้ใช้ดูหรือแก้ได้เฉพาะโปรไฟล์ของตัวเอง
-- บันทึกข้อมูลโปรไฟล์ลง JSON และเพิ่มหน้า `profile.html` สำหรับโหลด บันทึก และค้นหาวิชา
+- บันทึกข้อมูลโปรไฟล์ลง JSON และทำ frontend ที่ `frontend/` สำหรับสมัคร/เข้าสู่ระบบ จัดการวิชา และค้นหาเพื่อนร่วมวิชา
 - เพิ่ม README, `.env.example` และ Dockerfile เบื้องต้น
 - เพิ่ม API tests ครอบคลุมการอ่าน/บันทึก/ค้นหา, validation, สิทธิ์ และ token ใน `src/app.test.ts`
 - เพิ่ม `POST /internal/users` สำหรับ Auth พร้อมตรวจ `X-Service-Token`, สร้างโปรไฟล์ครั้งแรก, retry แบบ idempotent และตอบ conflict เมื่อข้อมูลขัดกัน
-- ติดตั้ง dependencies และตรวจผ่าน `npm run typecheck`, `npm run build` และ `npm test` (7 tests ผ่าน)
+- ติดตั้ง dependencies และตรวจผ่าน service `typecheck`, `build`, `test` (12 tests ผ่าน) และ frontend `build`
 
 ## ข้อตกลงที่ยังต้องยืนยันก่อนเชื่อมบริการ
 
@@ -43,7 +43,7 @@
 
 ### สมาชิก 5 — Integration / Tester
 
-- เพิ่ม Profile Service ในการรันทดสอบรวมหลัง contract ได้ข้อสรุป
+- เพิ่ม frontend และ Profile Service ในการรันทดสอบรวมหลัง contract ได้ข้อสรุป
 - เตรียม flow ทดสอบล็อกอิน → บันทึกวิชา → ค้นหาผู้ใช้ตามวิชา
 - ประสาน fixture หรือข้อมูลผู้ใช้จำลองสำหรับการทดสอบ โดยไม่ใช้ข้อมูลส่วนตัวจริง
 
@@ -55,4 +55,4 @@
 
 ## วิธีเริ่ม local
 
-ดูคำสั่งและรายละเอียด API ใน [README.md](README.md) คัดลอก `.env.example` เป็น `.env` แล้วตั้ง `AUTH_TOKEN_SECRET` ให้ตรงกับค่าทดสอบของ Auth Service ข้อมูลจริงและ secret ห้าม commit ลง repository
+ดูคำสั่งและรายละเอียด API ใน [README.md](README.md) คัดลอก `.env.example` เป็น `.env` แล้วตั้ง `AUTH_TOKEN_SECRET` และ `PROFILE_SERVICE_TOKEN` ใน environment ทดสอบให้ตรงกับ Auth Service โดยห้าม commit ค่าจริง ส่วน frontend อยู่ที่ `frontend/` และอ่าน `VITE_AUTH_URL`/`VITE_PROFILE_URL` จากไฟล์ `.env` ของ frontend
