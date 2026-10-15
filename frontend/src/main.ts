@@ -440,6 +440,9 @@ function renderGroups(groups: Group[]) {
       const isMember = group.members.includes(myId ?? '');
       const isFull = group.members.length >= group.maxMembers;
       const isClosed = !group.isOpen;
+      const seatsFilled = Math.min(group.members.length, group.maxMembers);
+      const capacityPercent = Math.round((seatsFilled / group.maxMembers) * 100);
+      const seatsAvailable = Math.max(0, group.maxMembers - group.members.length);
 
       let statusBadge = '';
       if (isClosed) {
@@ -473,7 +476,7 @@ function renderGroups(groups: Group[]) {
       return `
         <article class="group-card" data-id="${escapeHtml(group.id)}">
           <div class="session-index" aria-hidden="true"><span>SESSION</span><b>${String(index + 1).padStart(2, "0")}</b><span>✳</span></div>
-          <div>
+          <div class="group-card-main">
             <div class="group-header">
               <span class="subject-badge">${escapeHtml(group.subject)}</span>
               ${statusBadge}
@@ -490,9 +493,18 @@ function renderGroups(groups: Group[]) {
               </div>
             </div>
             ${group.description ? `<p class="group-desc">${escapeHtml(group.description)}</p>` : ''}
+            <div class="group-capacity" aria-label="สมาชิก ${group.members.length} จาก ${group.maxMembers} คน">
+              <div class="group-capacity-copy">
+                <span>จำนวนสมาชิก</span>
+                <strong>${group.members.length} / ${group.maxMembers} คน</strong>
+                <small>${seatsAvailable > 0 ? `เหลืออีก ${seatsAvailable} ที่นั่ง` : 'สมาชิกเต็มแล้ว'}</small>
+              </div>
+              <div class="group-capacity-track" role="img" aria-label="ใช้ที่นั่งแล้ว ${capacityPercent}%">
+                <span style="width:${capacityPercent}%"></span>
+              </div>
+            </div>
           </div>
           <div class="group-card-footer">
-            <span class="seats-counter">◎ ${group.members.length} / ${group.maxMembers} ที่นั่ง</span>
             ${actionHtml}
           </div>
         </article>
