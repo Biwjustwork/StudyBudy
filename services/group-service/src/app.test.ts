@@ -260,11 +260,11 @@ test("a failed save does not break later saves", async () => {
   await rm(sub, { recursive: true, force: true });
   await writeFile(sub, "in the way");
   await assert.rejects(store2.create(input));
-  // ซ่อม disk กลับ: เซฟครั้งต่อไปต้องสำเร็จ และข้อมูลบน disk ต้องครบ 3 กลุ่ม
+  // ซ่อม disk กลับ: เซฟครั้งต่อไปต้องสำเร็จ โดยข้อมูลที่เซฟล้มเหลวต้องไม่ค้างใน memory
   // Repair the disk: the next save must work again.
   await rm(sub, { force: true });
   const recovered = await store2.create(input);
   assert.ok(recovered.id);
   const onDisk = JSON.parse(await readFile(file, "utf8")) as unknown[];
-  assert.equal(onDisk.length, 3);
+  assert.equal(onDisk.length, 2);
 });
