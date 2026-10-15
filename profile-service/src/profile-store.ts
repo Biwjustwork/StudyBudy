@@ -8,6 +8,10 @@ export type Profile = {
   subjects: string[];
 };
 
+export type CreateProfileResult =
+  | { status: "created" | "existing"; profile: Profile }
+  | { status: "conflict" };
+
 export class ProfileStore {
   private profiles = new Map<string, Profile>();
   private writeQueue: Promise<void> = Promise.resolve();
@@ -34,6 +38,19 @@ export class ProfileStore {
   get(id: string): Profile | undefined {
     const profile = this.profiles.get(id);
     return profile ? structuredClone(profile) : undefined;
+  }
+
+  async createFromAuth(input: { id: string; name: string; email: string }): Promise<CreateProfileResult> {
+    const existing = this.profiles.get(input.id);
+    if (existing) {
+      if (existing.name !== input.name || existing.email !== input.email) return { status: "conflict" };
+      return { status: "existing", profile: structuredClone(existing) };
+    }
+
+    const profile: Profile = { ...input, subjects: [] };
+    this.profiles.set(profile.id, profile);
+    await this.persist();
+    return { status: "created", profile: structuredClone(profile) };
   }
 
   findBySubject(subject: string): Profile[] {

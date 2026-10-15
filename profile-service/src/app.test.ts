@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -10,10 +10,12 @@ import { createApp } from "./app.js";
 import { ProfileStore } from "./profile-store.js";
 
 const secret = "test-only-secret";
+const serviceToken = "test-only-service-token";
 let directory: string;
 let server: Server;
 let baseUrl: string;
 let token: string;
+let profileStore: ProfileStore;
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "study-buddy-profile-"));
@@ -22,8 +24,8 @@ beforeEach(async () => {
     { id: "user-1", name: "กิต", email: "kit@example.test", subjects: ["ชีววิทยา"] },
     { id: "user-2", name: "เมย์", subjects: ["ชีววิทยา", "เคมี"] }
   ]));
-  const seededStore = await ProfileStore.open(join(directory, "profiles.json"));
-  server = createApp(seededStore, secret).listen(0);
+  profileStore = await ProfileStore.open(join(directory, "profiles.json"));
+  server = createApp(profileStore, secret, serviceToken).listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   token = jwt.sign({ userId: "user-1" }, secret, { algorithm: "HS256", expiresIn: "5m" });
@@ -92,4 +94,69 @@ test("PUT cannot update a different user's profile", async () => {
     body: JSON.stringify({ subjects: ["ฟิสิกส์"] })
   });
   assert.equal(response.status, 403);
+});
+
+test("internal create provisions a profile with an empty subject list", async () => {
+  const response = await fetch(`${baseUrl}/internal/users`, {
+    method: "POST", headers: { "X-Service-Token": serviceToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "user-3", name: "นัท", email: "nut@example.test" })
+  });
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), {
+    id: "user-3", name: "นัท", email: "nut@example.test", subjects: []
+  });
+});
+
+test("internal create retry returns 200 and does not create a duplicate", async () => {
+  const options = {
+    method: "POST",
+    headers: { "X-Service-Token": serviceToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "user-3", name: "นัท", email: "nut@example.test" })
+  };
+  const first = await fetch(`${baseUrl}/internal/users`, options);
+  await profileStore.setSubjects("user-3", ["แคลคูลัส"]);
+  const retry = await fetch(`${baseUrl}/internal/users`, options);
+  assert.equal(first.status, 201);
+  assert.equal(retry.status, 200);
+  assert.deepEqual((await retry.json() as { subjects: string[] }).subjects, ["แคลคูลัส"]);
+  const records = JSON.parse(await readFile(join(directory, "profiles.json"), "utf8"));
+  assert.equal(records.filter((profile: { id: string }) => profile.id === "user-3").length, 1);
+});
+
+test("internal create rejects reused IDs with different identity data", async () => {
+  const response = await fetch(`${baseUrl}/internal/users`, {
+    method: "POST", headers: { "X-Service-Token": serviceToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: "user-1", name: "Different Name", email: "different@example.test" })
+  });
+  assert.equal(response.status, 409);
+  const profile = await fetch(`${baseUrl}/api/users/user-1`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal((await profile.json() as { name: string }).name, "กิต");
+});
+
+test("internal create requires a valid service token", async () => {
+  const headerCases: HeadersInit[] = [
+    { "Content-Type": "application/json" },
+    { "X-Service-Token": "wrong-token", "Content-Type": "application/json" }
+  ];
+  for (const headers of headerCases) {
+    const response = await fetch(`${baseUrl}/internal/users`, {
+      method: "POST", headers,
+      body: JSON.stringify({ id: "user-3", name: "นัท", email: "nut@example.test" })
+    });
+    assert.equal(response.status, 401);
+  }
+});
+
+test("internal create rejects missing or invalid fields", async () => {
+  for (const body of [
+    { id: "user-3", name: "นัท" },
+    { id: "user-3", name: " ", email: "nut@example.test" },
+    { id: "user-3", name: "นัท", email: 7 }
+  ]) {
+    const response = await fetch(`${baseUrl}/internal/users`, {
+      method: "POST", headers: { "X-Service-Token": serviceToken, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    assert.equal(response.status, 400);
+  }
 });

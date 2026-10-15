@@ -10,12 +10,13 @@
 - บันทึกข้อมูลโปรไฟล์ลง JSON และเพิ่มหน้า `profile.html` สำหรับโหลด บันทึก และค้นหาวิชา
 - เพิ่ม README, `.env.example` และ Dockerfile เบื้องต้น
 - เพิ่ม API tests ครอบคลุมการอ่าน/บันทึก/ค้นหา, validation, สิทธิ์ และ token ใน `src/app.test.ts`
+- เพิ่ม `POST /internal/users` สำหรับ Auth พร้อมตรวจ `X-Service-Token`, สร้างโปรไฟล์ครั้งแรก, retry แบบ idempotent และตอบ conflict เมื่อข้อมูลขัดกัน
 - ติดตั้ง dependencies และตรวจผ่าน `npm run typecheck`, `npm run build` และ `npm test` (7 tests ผ่าน)
 
 ## ข้อตกลงที่ยังต้องยืนยันก่อนเชื่อมบริการ
 
 - JWT จาก Auth Service ต้องใช้ HS256 และมี claim ชื่อ `userId`; สมาชิก 1 ช่วยยืนยันว่าเข้ากับ Auth Service จริง
-- ต้องกำหนดวิธีสร้างข้อมูลโปรไฟล์เมื่อสมัคร/สร้างผู้ใช้ใหม่ เพราะ Profile Service ไม่มี endpoint สร้างบัญชี
+- สมาชิก 1 ต้องตั้ง `PROFILE_URL` และ `PROFILE_SERVICE_TOKEN` ใน Auth environment ให้ตรงกับ Profile Service
 - ข้อมูลเริ่มต้นที่ Profile Service ใช้มีรูปแบบ `{ "id": "...", "name": "...", "email": "optional", "subjects": [] }`
 - ต้องยืนยันว่า `GET /api/users/search` เปิดให้ผู้ใช้ที่ล็อกอินทุกคนค้นหาได้ และข้อมูล `id`, `name`, `subjects` เพียงพอสำหรับผู้เรียก
 - `AUTH_TOKEN_SECRET` ต้องตรงกับค่าที่ Auth Service ใช้ และตั้งผ่าน environment/secret เท่านั้น
@@ -25,7 +26,7 @@
 ### สมาชิก 1 — Auth Service / ผู้ประสานงาน
 
 - ยืนยันรูปแบบ token, claim `userId`, algorithm และการใช้ secret ร่วมกัน
-- กำหนดวิธี provision โปรไฟล์เมื่อมีผู้ใช้ใหม่ เช่น ส่ง event/เรียก API ภายใน หรือใช้ฐานข้อมูลร่วมตาม contract ที่ทีมตกลง
+- เรียก `POST /internal/users` หลังสมัคร โดยส่ง `{ id, name, email }` และ header `X-Service-Token`; ห้ามเขียนไฟล์/ฐานข้อมูลของ Profile โดยตรง
 - แจ้ง contract และตัวอย่าง token/ข้อมูลผู้ใช้สำหรับทดสอบ โดยใช้ข้อมูลจำลองและห้ามส่ง secret จริง
 
 ### สมาชิก 3 — Study Group / Session Service
