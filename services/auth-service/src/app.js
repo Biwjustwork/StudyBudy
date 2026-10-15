@@ -5,6 +5,13 @@ function createApp(dependencies = {}) {
   const app = express();
 
   app.use(express.json({ limit: '10kb' }));
+  app.use((request, response, next) => {
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    if (request.method === 'OPTIONS') return response.sendStatus(204);
+    next();
+  });
 
   app.get('/health', (_request, response) => {
     response.status(200).json({ status: 'ok', service: 'auth-service' });

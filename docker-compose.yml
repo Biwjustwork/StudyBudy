@@ -25,6 +25,7 @@ services:
     environment:
       PORT: 3002
       AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      PROFILE_SERVICE_TOKEN: ${PROFILE_SERVICE_TOKEN:-replace-with-shared-profile-service-token}
       PROFILE_DATA_FILE: /app/data/profiles.json
     volumes:
       - profile-data:/app/data
