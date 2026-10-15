@@ -6,7 +6,7 @@ export type Group = {
   id: string;
   subject: string;
   topic: string;
-  datetime: string;
+  startsAt: string;
   maxMembers: number;
   location: string;
   ownerId: string;
@@ -19,7 +19,7 @@ export type Group = {
 export type CreateGroupInput = {
   subject: string;
   topic: string;
-  datetime: string;
+  startsAt: string;
   maxMembers: number;
   location: string;
   ownerId: string;
@@ -65,7 +65,7 @@ export class GroupStore {
       id: randomUUID(),
       subject: input.subject,
       topic: input.topic,
-      datetime: input.datetime,
+      startsAt: input.startsAt,
       maxMembers: input.maxMembers,
       location: input.location,
       ownerId: input.ownerId,
@@ -125,7 +125,7 @@ function isGroup(value: unknown): value is Group {
   return typeof group.id === "string" && group.id.length > 0
     && typeof group.subject === "string"
     && typeof group.topic === "string"
-    && typeof group.datetime === "string"
+    && typeof group.startsAt === "string"
     && typeof group.maxMembers === "number"
     && typeof group.location === "string"
     && typeof group.ownerId === "string" && group.ownerId.length > 0

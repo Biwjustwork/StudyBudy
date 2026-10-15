@@ -43,7 +43,7 @@ export function createApp(store: GroupStore, tokenSecret: string) {
     const group = await store.create({
       subject: validated.value.subject,
       topic: validated.value.topic,
-      datetime: validated.value.datetime,
+      startsAt: validated.value.startsAt,
       maxMembers: validated.value.maxMembers,
       location: validated.value.location,
       ownerId: userId,
@@ -63,7 +63,7 @@ export function createApp(store: GroupStore, tokenSecret: string) {
     if (openOnly) {
       groups = groups.filter((group) => group.isOpen && group.members.length < group.maxMembers);
     }
-    groups.sort((a, b) => Date.parse(a.datetime) - Date.parse(b.datetime));
+    groups.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
     return response.json(groups);
   });
 
@@ -121,7 +121,7 @@ export function createApp(store: GroupStore, tokenSecret: string) {
 type ValidatedGroupInput = {
   subject: string;
   topic: string;
-  datetime: string;
+  startsAt: string;
   maxMembers: number;
   location: string;
   isOpen: boolean;
@@ -140,10 +140,13 @@ function reqFutureDatetime(input: Record<string, unknown>, field: string): { ok:
   if (!parsed.ok) return parsed;
   const time = Date.parse(parsed.value);
   if (Number.isNaN(time)) {
-    return { ok: false, message: "datetime must be a valid ISO 8601 date string" };
+    return { ok: false, message: "startsAt must be a valid ISO 8601 date string" };
   }
   if (time <= Date.now()) {
-    return { ok: false, message: "datetime must be in the future" };
+    return { ok: false, message: "startsAt must be in the future" };
+  }
+  if (!/([Zz]|[+-]\d{2}:?\d{2})$/.test(parsed.value)) {
+    return { ok: false, message: "startsAt must be a valid ISO 8601 date string" };
   }
   return { ok: true, value: parsed.value };
 }
@@ -176,8 +179,8 @@ function validateGroupInput(body: unknown): { ok: true; value: ValidatedGroupInp
     const parsed = reqString(input, field);
     if (!parsed.ok) return parsed;
   }
-  const datetime = reqFutureDatetime(input, "datetime");
-  if (!datetime.ok) return datetime;
+  const startsAt = reqFutureDatetime(input, "startsAt");
+  if (!startsAt.ok) return startsAt;
   const maxMembers = reqMaxMembers(input, "maxMembers", null);
   if (!maxMembers.ok) return maxMembers;
   const isOpen = optIsOpen(input);
@@ -187,7 +190,7 @@ function validateGroupInput(body: unknown): { ok: true; value: ValidatedGroupInp
     value: {
       subject: (input["subject"] as string).trim(),
       topic: (input["topic"] as string).trim(),
-      datetime: datetime.value,
+      startsAt: startsAt.value,
       maxMembers: maxMembers.value,
       location: (input["location"] as string).trim(),
       isOpen: isOpen.value,
@@ -195,17 +198,17 @@ function validateGroupInput(body: unknown): { ok: true; value: ValidatedGroupInp
   };
 }
 
-type ValidatedGroupPatch = Partial<Pick<ValidatedGroupInput, "subject" | "topic" | "datetime" | "maxMembers" | "location" | "isOpen">>;
+type ValidatedGroupPatch = Partial<Pick<ValidatedGroupInput, "subject" | "topic" | "startsAt" | "maxMembers" | "location" | "isOpen">>;
 
 function validateGroupPatch(body: unknown, membersLength: number): { ok: true; value: ValidatedGroupPatch } | { ok: false; message: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, message: "Request body must be an object" };
   }
   const input = body as Record<string, unknown>;
-  const allowed = ["subject", "topic", "datetime", "location", "maxMembers", "isOpen"] as const;
+  const allowed = ["subject", "topic", "startsAt", "location", "maxMembers", "isOpen"] as const;
   const present = allowed.filter((field) => input[field] !== undefined);
   if (present.length === 0) {
-    return { ok: false, message: "At least one updatable field (subject, topic, datetime, location, maxMembers, isOpen) is required" };
+    return { ok: false, message: "At least one updatable field (subject, topic, startsAt, location, maxMembers, isOpen) is required" };
   }
   const value: ValidatedGroupPatch = {};
   for (const field of ["subject", "topic", "location"] as const) {
@@ -214,10 +217,10 @@ function validateGroupPatch(body: unknown, membersLength: number): { ok: true; v
     if (!parsed.ok) return parsed;
     value[field] = parsed.value;
   }
-  if (input["datetime"] !== undefined) {
-    const datetime = reqFutureDatetime(input, "datetime");
-    if (!datetime.ok) return datetime;
-    value.datetime = datetime.value;
+  if (input["startsAt"] !== undefined) {
+    const startsAt = reqFutureDatetime(input, "startsAt");
+    if (!startsAt.ok) return startsAt;
+    value.startsAt = startsAt.value;
   }
   if (input["maxMembers"] !== undefined) {
     const maxMembers = reqMaxMembers(input, "maxMembers", membersLength);

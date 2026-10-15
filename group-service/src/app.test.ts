@@ -22,7 +22,7 @@ const futureDate = (offsetDays: number) => new Date(Date.now() + offsetDays * da
 const validBody = {
   subject: "Calculus",
   topic: "Limits",
-  datetime: futureDate(30),
+  startsAt: futureDate(30),
   maxMembers: 5,
   location: "Library 3F",
 };
@@ -61,14 +61,14 @@ test("API without token returns 401 {error,message}", async () => {
 test("POST creates group with valid input and sets owner from token", async () => {
   const r = await fetch(`${baseUrl}/api/groups`, { method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ subject: "Calculus", topic: "Limits", datetime: futureDate(30), maxMembers: 5, location: "Library 3F" }) });
+    body: JSON.stringify({ subject: "Calculus", topic: "Limits", startsAt: futureDate(30), maxMembers: 5, location: "Library 3F" }) });
   assert.equal(r.status, 201);
   const g = await r.json() as Group;
   assert.equal(g.ownerId, "user-1"); assert.deepEqual(g.members, ["user-1"]);
 });
 
-test("POST rejects missing subject/datetime and non-positive maxMembers with 400", async () => {
-  for (const body of [{ topic: "x" }, { subject: "Cal", topic: "t", datetime: "not-a-date", maxMembers: 5, location: "l" }, { subject: "Cal", topic: "t", datetime: futureDate(30), maxMembers: 0, location: "l" }, { subject: "Cal", topic: "t", datetime: futureDate(30), maxMembers: 2.5, location: "l" }]) {
+test("POST rejects missing subject/startsAt and non-positive maxMembers with 400", async () => {
+  for (const body of [{ topic: "x" }, { subject: "Cal", topic: "t", startsAt: "not-a-date", maxMembers: 5, location: "l" }, { subject: "Cal", topic: "t", startsAt: futureDate(30), maxMembers: 0, location: "l" }, { subject: "Cal", topic: "t", startsAt: futureDate(30), maxMembers: 2.5, location: "l" }]) {
     const r = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
     assert.equal(r.status, 400);
   }
@@ -80,10 +80,10 @@ test("GET search filters by subject case-insensitively and openOnly hides full/c
     assert.equal(r.status, 201);
     return (await r.json()) as Group;
   }
-  await create({ ...validBody, subject: "Calculus", datetime: futureDate(33), maxMembers: 5 });
-  await create({ ...validBody, subject: "Calculus", datetime: futureDate(32), maxMembers: 1 });
-  await create({ ...validBody, subject: "Calculus", datetime: futureDate(34), maxMembers: 5, isOpen: false });
-  await create({ ...validBody, subject: "Physics", datetime: futureDate(31), maxMembers: 5 });
+  await create({ ...validBody, subject: "Calculus", startsAt: futureDate(33), maxMembers: 5 });
+  await create({ ...validBody, subject: "Calculus", startsAt: futureDate(32), maxMembers: 1 });
+  await create({ ...validBody, subject: "Calculus", startsAt: futureDate(34), maxMembers: 5, isOpen: false });
+  await create({ ...validBody, subject: "Physics", startsAt: futureDate(31), maxMembers: 5 });
 
   const open = await (await fetch(`${baseUrl}/api/groups?subject=${encodeURIComponent("  CALCULUS ")}&openOnly=true`, { headers: { Authorization: `Bearer ${token}` } })).json() as Group[];
   assert.equal(open.length, 1);
@@ -91,7 +91,7 @@ test("GET search filters by subject case-insensitively and openOnly hides full/c
 
   const all = await (await fetch(`${baseUrl}/api/groups`, { headers: { Authorization: `Bearer ${token}` } })).json() as Group[];
   assert.equal(all.length, 4);
-  const times = all.map((g) => Date.parse(g.datetime));
+  const times = all.map((g) => Date.parse(g.startsAt));
   assert.deepEqual([...times].sort((a, b) => a - b), times);
 });
 
@@ -120,14 +120,14 @@ test("PATCH by owner updates topic/location, non-owner gets 403", async () => {
   assert.equal(((await denied.json()) as { error: string }).error, "forbidden");
 });
 
-test("PATCH rejects shrinking maxMembers below current members and bad datetime", async () => {
+test("PATCH rejects shrinking maxMembers below current members and bad startsAt", async () => {
   const created = await (await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify({ ...validBody, maxMembers: 3 }) })).json() as Group;
   // Seed 3 members via the store directly (no forward dep on Task 5 endpoint).
   await store.update(created.id, { members: ["user-1", "user-2", "user-3"] });
   const shrink = await fetch(`${baseUrl}/api/groups/${created.id}`, { method: "PATCH", headers: authJson(token), body: JSON.stringify({ maxMembers: 2 }) });
   assert.equal(shrink.status, 400);
   assert.equal(((await shrink.json()) as { error: string }).error, "validation_error");
-  const badDate = await fetch(`${baseUrl}/api/groups/${created.id}`, { method: "PATCH", headers: authJson(token), body: JSON.stringify({ datetime: "tomorrow" }) });
+  const badDate = await fetch(`${baseUrl}/api/groups/${created.id}`, { method: "PATCH", headers: authJson(token), body: JSON.stringify({ startsAt: "tomorrow" }) });
   assert.equal(badDate.status, 400);
   assert.equal(((await badDate.json()) as { error: string }).error, "validation_error");
 });
@@ -165,8 +165,8 @@ test("non-owner cannot add members (403)", async () => {
   assert.equal(((await denied.json()) as { error: string }).error, "forbidden");
 });
 
-test("past datetime, empty userId, and closed group are rejected", async () => {
-  const past = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify({ ...validBody, datetime: "2020-01-01T00:00:00Z" }) });
+test("past startsAt, empty userId, and closed group are rejected", async () => {
+  const past = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify({ ...validBody, startsAt: "2020-01-01T00:00:00Z" }) });
   assert.equal(past.status, 400);
   assert.equal(((await past.json()) as { error: string }).error, "validation_error");
   const g = await createGroup(token, validBody);
@@ -177,6 +177,20 @@ test("past datetime, empty userId, and closed group are rejected", async () => {
   const denied = await postMember(g.id, "user-2", token);
   assert.equal(denied.status, 422);
   assert.equal(((await denied.json()) as { error: string }).error, "capacity_exceeded");
+});
+
+test("startsAt without timezone is rejected", async () => {
+  const noTz = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify({ ...validBody, startsAt: "2026-11-01T10:00:00" }) });
+  assert.equal(noTz.status, 400);
+  assert.equal(((await noTz.json()) as { error: string }).error, "validation_error");
+});
+
+test("legacy field without startsAt is rejected, Z-suffixed ISO is accepted", async () => {
+  const legacy = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify({ subject: "Calculus", topic: "Limits", datetime: futureDate(30), maxMembers: 5, location: "Library 3F" }) });
+  assert.equal(legacy.status, 400);
+  assert.equal(((await legacy.json()) as { error: string }).error, "validation_error");
+  const zulu = await fetch(`${baseUrl}/api/groups`, { method: "POST", headers: authJson(token), body: JSON.stringify(validBody) });
+  assert.equal(zulu.status, 201);
 });
 
 test("a failed save does not break later saves", async () => {
