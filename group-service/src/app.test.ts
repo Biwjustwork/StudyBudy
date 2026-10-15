@@ -10,6 +10,7 @@ import { createApp } from "./app.js";
 import { GroupStore, type Group } from "./group-store.js";
 
 const secret = "test-only-secret";
+const serviceToken = "test-only-secret";
 let directory: string;
 let server: Server;
 let baseUrl: string;
@@ -34,7 +35,7 @@ function authJson(t: string): Record<string, string> {
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "study-buddy-group-"));
   store = await GroupStore.open(join(directory, "groups.json"));
-  server = createApp(store, secret).listen(0);
+  server = createApp(store, secret, serviceToken).listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   token = jwt.sign({ userId: "user-1" }, secret, { algorithm: "HS256", expiresIn: "5m" });
@@ -138,31 +139,61 @@ async function createGroup(authToken: string, body: unknown): Promise<Group> {
   return (await r.json()) as Group;
 }
 
-async function postMember(groupId: string, userId: unknown, authToken: string): Promise<Response> {
-  return fetch(`${baseUrl}/api/groups/${groupId}/members`, { method: "POST", headers: authJson(authToken), body: JSON.stringify({ userId }) });
+async function postMember(groupId: string, userId: unknown, svcToken: string | undefined = serviceToken): Promise<Response> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (svcToken !== undefined) headers["x-service-token"] = svcToken;
+  return fetch(`${baseUrl}/internal/groups/${groupId}/members`, { method: "POST", headers, body: JSON.stringify({ userId }) });
 }
 
-test("owner can add member once, duplicate is 409, full group is 422", async () => {
+test("service token can add member once, duplicate is 409, full group is 422", async () => {
   const g = await createGroup(token, { ...validBody, maxMembers: 2 });
-  const first = await postMember(g.id, "user-2", token);
+  const first = await postMember(g.id, "user-2");
   assert.equal(first.status, 200);
   const added = (await first.json()) as Group;
   assert.ok(added.members.includes("user-2"));
-  const dup = await postMember(g.id, "user-2", token);
+  const dup = await postMember(g.id, "user-2");
   assert.equal(dup.status, 409);
   assert.equal(((await dup.json()) as { error: string }).error, "conflict");
   // Group is now full (2/2); next distinct user must be rejected.
-  const full = await postMember(g.id, "user-3", token);
+  const full = await postMember(g.id, "user-3");
   assert.equal(full.status, 422);
   assert.equal(((await full.json()) as { error: string }).error, "capacity_exceeded");
 });
 
-test("non-owner cannot add members (403)", async () => {
+test("old owner member route is gone (404)", async () => {
   const g = await createGroup(token, validBody);
-  const other = jwt.sign({ userId: "user-2" }, secret, { algorithm: "HS256" });
-  const denied = await postMember(g.id, "user-2", other);
-  assert.equal(denied.status, 403);
-  assert.equal(((await denied.json()) as { error: string }).error, "forbidden");
+  const r = await fetch(`${baseUrl}/api/groups/${g.id}/members`, { method: "POST", headers: authJson(token), body: JSON.stringify({ userId: "user-2" }) });
+  assert.equal(r.status, 404);
+});
+
+test("missing or empty service token is 401", async () => {
+  const g = await createGroup(token, validBody);
+  const missing = await fetch(`${baseUrl}/internal/groups/${g.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: "user-2" }) });
+  assert.equal(missing.status, 401);
+  assert.deepEqual(await missing.json(), { error: "unauthorized", message: "Service token is invalid" });
+  const empty = await postMember(g.id, "user-2", "");
+  assert.equal(empty.status, 401);
+  assert.deepEqual(await empty.json(), { error: "unauthorized", message: "Service token is invalid" });
+});
+
+test("wrong service token value is 401", async () => {
+  const g = await createGroup(token, validBody);
+  const r = await postMember(g.id, "user-2", "wrong-secret");
+  assert.equal(r.status, 401);
+  assert.deepEqual(await r.json(), { error: "unauthorized", message: "Service token is invalid" });
+});
+
+test("Auth JWT sent as x-service-token is 401", async () => {
+  const g = await createGroup(token, validBody);
+  const r = await postMember(g.id, "user-2", token);
+  assert.equal(r.status, 401);
+  assert.deepEqual(await r.json(), { error: "unauthorized", message: "Service token is invalid" });
+});
+
+test("adding a member to an unknown group is 404", async () => {
+  const r = await postMember("no-such-id", "user-2");
+  assert.equal(r.status, 404);
+  assert.equal(((await r.json()) as { error: string }).error, "not_found");
 });
 
 test("past startsAt, empty userId, and closed group are rejected", async () => {
@@ -170,11 +201,11 @@ test("past startsAt, empty userId, and closed group are rejected", async () => {
   assert.equal(past.status, 400);
   assert.equal(((await past.json()) as { error: string }).error, "validation_error");
   const g = await createGroup(token, validBody);
-  const empty = await postMember(g.id, "   ", token);
+  const empty = await postMember(g.id, "   ");
   assert.equal(empty.status, 400);
   const closed = await fetch(`${baseUrl}/api/groups/${g.id}`, { method: "PATCH", headers: authJson(token), body: JSON.stringify({ isOpen: false }) });
   assert.equal(closed.status, 200);
-  const denied = await postMember(g.id, "user-2", token);
+  const denied = await postMember(g.id, "user-2");
   assert.equal(denied.status, 422);
   assert.equal(((await denied.json()) as { error: string }).error, "capacity_exceeded");
 });
