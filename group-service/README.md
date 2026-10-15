@@ -5,14 +5,14 @@ Group API owned by member 3. It stores each study group's subject, topic, meetin
 ```
 group-service/
   src/
-    server.ts       # env wiring only (PORT, AUTH_TOKEN_SECRET, GROUP_DATA_FILE)
-    app.ts          # HTTP/auth/validation/status; createApp(store, secret)
+    server.ts       # env wiring only (PORT, AUTH_TOKEN_SECRET, SERVICE_TOKEN, GROUP_DATA_FILE)
+    app.ts          # HTTP/auth/validation/status; createApp(store, tokenSecret, serviceToken)
     group-store.ts  # Group type + Map store + atomic JSON persist + atomic addMember
     app.test.ts     # 18 endpoint tests (fetch + ephemeral port)
   groups.html       # Real UI: full CRUD against the live Group API
   groups-mock.html  # Mock UI: in-memory demo groups + live Profile API lookup
   Dockerfile        # node:22-alpine, EXPOSE 3003
-  .env.example      # PORT, AUTH_TOKEN_SECRET, GROUP_DATA_FILE (no real secrets)
+  .env.example      # PORT, AUTH_TOKEN_SECRET, SERVICE_TOKEN, GROUP_DATA_FILE (no real secrets)
 ```
 
 A group looks like `{ "id": "...", "subject": "Calculus", "topic": "Limits", "startsAt": "2026-11-01T10:00:00+07:00", "maxMembers": 5, "location": "Library 3F", "ownerId": "user-1", "members": ["user-1"], "isOpen": true, "createdAt": "...", "updatedAt": "..." }`.
@@ -64,7 +64,7 @@ curl -X POST localhost:3003/internal/groups/<id>/members -H "x-service-token: $S
 
 ## Validation and status codes
 
-`subject/topic/startsAt/location` are trimmed and must be non-empty strings. `startsAt` must be a valid ISO 8601 string with an explicit timezone (`Z` or `±hh:mm`, so `2026-11-01T10:00:00` without a suffix is rejected, as are `2026-13-99` and `tomorrow`) and must be in the future — past dates return 400. `maxMembers` must be a positive integer (`0`, negatives, `2.5`, and `"5"` are all rejected) on both POST and PATCH, and PATCH may not shrink `maxMembers` below the current `members.length`. `isOpen` is optional (defaults `true`) and must be a boolean when present. PATCH requires at least one updatable field and can never change `id/ownerId/members/createdAt`. `POST /internal/groups/:id/members` requires a non-empty string `userId` and header `x-service-token: $SERVICE_TOKEN` (no Bearer).
+`subject/topic/startsAt/location` are trimmed and must be non-empty strings. `startsAt` must be a valid ISO 8601 string with an explicit timezone suffix (`Z` in either case, or `±hh` / `±hhmm` / `±hh:mm`), so `2026-11-01T10:00:00` without a suffix is rejected, as are `2026-13-99` and `tomorrow` and must be in the future — past dates return 400. `maxMembers` must be a positive integer (`0`, negatives, `2.5`, and `"5"` are all rejected) on both POST and PATCH, and PATCH may not shrink `maxMembers` below the current `members.length`. `isOpen` is optional (defaults `true`) and must be a boolean when present. PATCH requires at least one updatable field and can never change `id/ownerId/members/createdAt`. `POST /internal/groups/:id/members` requires a non-empty string `userId` and header `x-service-token: $SERVICE_TOKEN` (no Bearer).
 
 | Status | Meaning |
 | --- | --- |
@@ -133,4 +133,4 @@ npm test
 docker build -t study-buddy-group:local .
 ```
 
-Tests live in `src/app.test.ts` (18 tests: health, auth shape, create + owner-from-token, create 400s, case-insensitive search + `openOnly`, get-by-id 200/404, owner PATCH + 403, shrink/bad-date 400s, add/409/422, member-add 403). CI should run install → typecheck → build → unit test → `docker build` on every pull request. Release images use tag `v1.0.0`, e.g. `docker build -t study-buddy-group:v1.0.0 .`.
+Tests live in `src/app.test.ts` (18 tests: health, auth shape, create + owner-from-token, create 400s incl. no-timezone + legacy-field, search openOnly, get-by-id, owner PATCH + deleted-route 404, shrink/bad-startsAt 400s, internal add 200/duplicate-409/full-422/closed-422, service-token 401s incl. missing/empty/wrong/JWT-as-token, unknown-group 404, empty-userId 400, persist-recovery). CI should run install → typecheck → build → unit test → `docker build` on every pull request. Release images use tag `v1.0.0`, e.g. `docker build -t study-buddy-group:v1.0.0 .`.

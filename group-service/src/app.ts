@@ -11,7 +11,7 @@ export function createApp(store: GroupStore, tokenSecret: string, serviceToken: 
   app.use((request, response, next) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
     response.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
-    response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, x-service-token");
     if (request.method === "OPTIONS") return response.sendStatus(204);
     next();
   });
