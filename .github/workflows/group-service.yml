@@ -1,4 +1,4 @@
-name: group-ci
+name: group-service
 on:
   push:
     paths: [services/group-service/**, .github/workflows/group-ci.yml]
