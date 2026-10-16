@@ -1,0 +1,101 @@
+# Production / Evaluation compose file using published Docker Hub images
+services:
+  auth-service:
+    image: biwjustwork/study-buddy-auth:v1.0.0
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      AUTH_DATA_FILE: /app/data/users.json
+      PROFILE_URL: http://profile-service:3002
+      PROFILE_SERVICE_TOKEN: ${PROFILE_SERVICE_TOKEN:-replace-with-shared-profile-service-token}
+    volumes:
+      - auth-data:/app/data
+    depends_on:
+      profile-service:
+        condition: service_started
+
+  profile-service:
+    image: biwjustwork/study-buddy-profile:v1.0.0
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      PROFILE_SERVICE_TOKEN: ${PROFILE_SERVICE_TOKEN:-replace-with-shared-profile-service-token}
+      PROFILE_DATA_FILE: /app/data/profiles.json
+    volumes:
+      - profile-data:/app/data
+
+  group-service:
+    image: biwjustwork/study-buddy-group:v1.0.0
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      GROUP_DATA_FILE: /app/data/groups.json
+      SERVICE_TOKEN: ${GROUP_SERVICE_TOKEN:-replace-with-shared-group-service-token}
+    volumes:
+      - group-data:/app/data
+
+  membership-service:
+    image: biwjustwork/study-buddy-membership:v1.0.0
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      GROUP_URL: http://group-service:3003
+      SERVICE_TOKEN: ${GROUP_SERVICE_TOKEN:-replace-with-shared-group-service-token}
+      MEMBERSHIP_DATA_FILE: /app/data/requests.json
+      NOTIFY_URL: http://notification-service:3005
+      NOTIFY_SERVICE_TOKEN: ${NOTIFY_SERVICE_TOKEN:-replace-with-shared-notification-service-token}
+      PROFILE_URL: http://profile-service:3002
+      PROFILE_SERVICE_TOKEN: ${PROFILE_SERVICE_TOKEN:-replace-with-shared-profile-service-token}
+    volumes:
+      - membership-data:/app/data
+    depends_on:
+      group-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      profile-service:
+        condition: service_started
+
+  notification-service:
+    image: biwjustwork/study-buddy-notification:v1.0.0
+    ports:
+      - "3005:3005"
+    environment:
+      PORT: 3005
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-replace-with-a-random-secret-at-least-32-characters}
+      NOTIFY_SERVICE_TOKEN: ${NOTIFY_SERVICE_TOKEN:-replace-with-shared-notification-service-token}
+      NOTIFICATION_DATA_FILE: /app/data/notifications.json
+    volumes:
+      - notification-data:/app/data
+
+  frontend:
+    image: biwjustwork/study-buddy-frontend:v1.0.0
+    ports:
+      - "5173:80"
+    depends_on:
+      auth-service:
+        condition: service_started
+      profile-service:
+        condition: service_started
+      group-service:
+        condition: service_started
+      membership-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+
+volumes:
+  auth-data:
+  profile-data:
+  group-data:
+  membership-data:
+  notification-data:
