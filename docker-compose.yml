@@ -81,6 +81,23 @@ services:
     volumes:
       - notification-data:/app/data
 
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      auth-service:
+        condition: service_started
+      profile-service:
+        condition: service_started
+      group-service:
+        condition: service_started
+      membership-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+
 volumes:
   auth-data:
   profile-data:
